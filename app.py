@@ -13,14 +13,14 @@ try:
     from google import genai
     from google.genai import types
 except ImportError:
-    st.error("Google GenAI eksik. Terminale şunu yaz: pip install google-genai")
+    st.error("Google GenAI eksik. pip install google-genai")
     st.stop()
 
 try:
     import firebase_admin
     from firebase_admin import credentials, db
 except ImportError:
-    st.error("Firebase Admin eksik. Terminale şunu yaz: pip install firebase-admin")
+    st.error("Firebase Admin eksik. pip install firebase-admin")
     st.stop()
 
 # ==========================================
@@ -36,7 +36,7 @@ BOT_CONFIGS = {
     "b0pt": {"username": "@b0pt_bot", "buttons": [("📊 Derinlik", "derinlik"), ("🏢 AKD", "akd"), ("🔢 Teorik", "teorik"), ("📚 Tüm Veriler", "tumu"), ("🔄 Takas", "takas"), ("📏 Kademe", "kademe"), ("📉 Grafik", "grafik"), ("🏦 Genel AKD", "genelakd"), ("🏢 Kurum Analizi", "kurum"), ("🔢 Teorik Yükselen - Düşen", "teorikyd"), ("📈 Piyasa Yükselen - Düşen", "piyasayd"), ("🇺🇸 Bofa Analizi", "bofa")]}
 }
 
-# --- SESSION BAŞLATMA ---
+# --- SESSION ---
 if 'telegram_flow' not in st.session_state: st.session_state['telegram_flow'] = {'step': 'idle', 'symbol': '', 'options': []}
 if 'telegram_images' not in st.session_state: st.session_state['telegram_images'] = []
 if 'key_index' not in st.session_state: st.session_state['key_index'] = 0
@@ -44,7 +44,7 @@ if 'dynamic_key_pool' not in st.session_state: st.session_state['dynamic_key_poo
 if 'selected_bot_key' not in st.session_state: st.session_state['selected_bot_key'] = "xFinans"
 
 # ==========================================
-# 🔑 KEY YÖNETİMİ (PC + CLOUD UYUMLU)
+# 🔑 KEY YÖNETİMİ
 # ==========================================
 def load_keys():
     keys = []
@@ -52,35 +52,27 @@ def load_keys():
     if os.path.exists(LOCAL_KEY_FILE):
         with open(LOCAL_KEY_FILE, "r", encoding="utf-8") as f:
             keys = [k.strip() for k in f.read().split('\n') if k.strip()]
-    
-    # 2. Dosya boşsa veya yoksa Secrets'a bak (Cloud için)
+    # 2. Dosya yoksa Secrets'a bak (Cloud)
     if not keys and "gemini" in st.secrets and "api_keys" in st.secrets["gemini"]:
         keys = st.secrets["gemini"]["api_keys"]
-    
     return keys
 
 def save_keys_to_disk(keys_list):
     clean_keys = [k.strip() for k in keys_list if k.strip()]
-    # Sadece PC'de dosyaya yazar
-    try:
-        with open(LOCAL_KEY_FILE, "w", encoding="utf-8") as f:
-            f.write("\n".join(clean_keys))
-        st.session_state['dynamic_key_pool'] = clean_keys
-        st.toast("Keyler api_keys.txt dosyasına kaydedildi!", icon="💾")
-    except Exception as e:
-        st.error(f"Kaydetme hatası: {e}")
+    if os.path.exists(LOCAL_KEY_FILE):
+        with open(LOCAL_KEY_FILE, "w", encoding="utf-8") as f: f.write("\n".join(clean_keys))
+    st.session_state['dynamic_key_pool'] = clean_keys
 
-# Uygulama açılışında keyleri yükle
 if not st.session_state['dynamic_key_pool']:
     st.session_state['dynamic_key_pool'] = load_keys()
 
 # ==========================================
-# 🔥 FIREBASE INIT (HARDCODED - SENİN KEY)
+# 🔥 FIREBASE INIT (GÖMÜLÜ ANAHTAR)
 # ==========================================
 def init_firebase():
     if len(firebase_admin._apps) > 0: return
     try:
-        # GÜVENLİK NOTU: Bu key kodun içinde. GitHub'a atarsan repo PRIVATE olsun.
+        # ANAHTAR BURADA (Secrets ayarına gerek yok)
         key_dict = {
           "type": "service_account",
           "project_id": "geminiborsa-f9a80",
@@ -162,98 +154,33 @@ def check_firebase_status():
             st.rerun()
 
 # ==========================================
-# 🧠 GEMINI ANALIZ (HAFIZA ENTEGRASYONU)
+# 🧠 GEMINI ANALIZ
 # ==========================================
 def analyze_images_stream(all_images, model_name):
     pool = st.session_state['dynamic_key_pool']
-    if not pool: yield "⚠️ HATA: API Key bulunamadı! Lütfen ayarlardan Gemini API Key ekleyin."; return
+    if not pool: yield "⚠️ HATA: API Key yok! Ayarlardan ekleyin."; return
     key = pool[st.session_state['key_index'] % len(pool)]
     
     SYSTEM_INSTRUCTION = """
     Sen Kıdemli Borsa Stratejistisin.
+    GÖREV: Görselleri analiz et.
+    ⚠️ KURALLAR: Her başlık altında EN AZ 20 MADDE ve KADEME YORUMU (ZORUNLU).
     
-    GÖREVİN:
-    Ekteki görsellerdeki verileri (Derinlik, AKD, Takas, Mini-App Listeleri, Grafikler) oku ve YARIDA KESMEDEN detaylıca raporla.
-    Görselde veri yoksa, o başlığın altına "Veri bulunamadı" yaz.
-
-    🎨 RENK KODLARI:
-    * :green[...] -> Yükseliş, Güçlü Alım, Destek Üstü, Pozitif.
-    * :red[...] -> Düşüş, Satış Baskısı, Direnç Altı, Negatif.
-    * :blue[...] -> Nötr Veri, Bilgi, Fiyat.
-
-    📄 RAPOR FORMATI:
-
-    ## 1. 🔍 GÖRSEL VERİ DÖKÜMÜ (Mini-App / Liste Varsa)
-    (Görseldeki tüm hisse, fiyat ve oranları buraya dök. Satır satır işle.)
-
-    ## 2. 📊 DERİNLİK ANALİZİ (Varsa)
-    * **Alıcı/Satıcı Dengesi:** (:green[Alıcılar] mı :red[Satıcılar] mı güçlü?)
-    * **Emir Yığılmaları:** (Hangi kademede ne kadar lot var?)
-
-    ## 3. 🏢 KURUM VE PARA GİRİŞİ (AKD) (Varsa)
-    * **Toplayanlar:** (Kim alıyor? Maliyetleri ne?)
-    * **Satanlar:** (Kim satıyor? Para çıkışı var mı?)
-
-    ## 4. 🧠 GENEL SENTEZ VE SKOR
-    * **Piyasa Yönü:** (Yukarı/Aşağı/Yatay)
-    * **Genel Puan:** 10 üzerinden X
-    * **Yorum:** :blue[Piyasa yapıcı ne planlıyor?]
-
+    RAPOR FORMATI:
+    ## 1. 🔍 GÖRSEL VERİ DÖKÜMÜ
+    ## 2. 📊 DERİNLİK ANALİZİ
+    ## 3. 🏢 KURUM VE PARA GİRİŞİ
+    ## 4. 🧠 GENEL SENTEZ
     ## 5. 🎯 İŞLEM PLANI
-    * :green[**GÜVENLİ GİRİŞ:** ...] 
-    * :red[**STOP LOSS:** ...]
-    * :green[**HEDEF 1:** ...]
-    * :green[**HEDEF 2:** ...]
-
-    ## 6. 🔮 KAPANIŞ BEKLENTİSİ
-    (Günün geri kalanı için tahmin.)
-    
-    ## 7.Gizli Balina / Iceberg Avcısı
-    *Bu derinlik ve gerçekleşen işlemler (Time & Sales) görüntüsüne bak. Kademedeki görünür lot sayısı az olmasına rağmen, o fiyattan sürekli işlem geçmesine rağmen fiyat aşağı/yukarı gitmiyor mu? 'Iceberg Emir' (Gizli Emir) veya Duvar Örme durumu var mı? Tahtacı fiyatı belli bir seviyede tutmaya mı çalışıyor? Bu seviye bir biriktirme (akümülasyon) bölgesi mi?
-    
-    ## 8. Boğa/Ayı Tuzağı (Fakeout) Dedektörü
-    *Fiyat önemli bir direnci/desteği kırmış görünüyor. Ancak AKD (Aracı Kurum Dağılımı) ve Hacim bunu destekliyor mu? Kırılım anında Bofa, Yatırım Finansman gibi büyük oyuncular alıcı tarafta mı, yoksa küçük yatırımcıya mal mı devrediyorlar? Bu hareketin bir Fakeout (Sahte Kırılım) olma ihtimalini 10 üzerinden puanla.
-    
-    ## 9.⚖️ Agresif vs. Pasif Emir Analizi
-    *Derinlikteki emirlerin niteliğini analiz et. Alıcılar 'Pasif'e mi (Kademeye) yazılıyor, yoksa 'Aktif'ten (Piyasa emriyle) mi alıyor? Satış kademeleri eriyor mu, yoksa sürekli yeni satış mı ekleniyor (Reloading)? Tahtadaki agresiflik (Market Buy/Sell) hangi yönde?
-    
-    ## 10.🏦 Maliyet ve Takas Baskısı
-    *Bugün en çok net alım yapan ilk 3 kurumun ortalama maliyetine bak. Şu anki fiyat, bu kurumların maliyetinin ne kadar üzerinde veya altında? Eğer fiyat maliyetlerinin çok altındaysa Zararına Satış baskısı oluşabilir mi? Yoksa maliyetlerine çekmek için fiyatı yukarı mı sürecekler?
-    
-    ## 11.🌊 RVOL ve Hacim Anormalliği
-    *Bu saatteki işlem hacmini, hissenin standart hacmiyle kıyasla (Göz kararı). Hacimde anormal bir patlama var mı? Eğer hacim yüksekse ama fiyat yerinde sayıyorsa (Doji/Spinning Top), bu bir 'Trend Dönüşü' sinyali olabilir mi? Hacim fiyatı destekliyor mu?
-    
-    ## 12. 🧱 Kademe Boşlukları ve Spread Analizi
-    *Alış ve satış kademeleri arasındaki makas (spread) açık mı? Kademeler dolu mu yoksa boş mu (Sığ tahta)? Eğer kademeler boşsa, yüklü bir emirle fiyatın sert bir şekilde (Slippage) kayma ihtimali nedir? Bu tahtada 'Scalp' yapmak riskli mi?
-    
-    ## 13. 🔄 VWAP Dönüş (Mean Reversion)
-    *Fiyatın gün içi ağırlıklı ortalamadan (VWAP) ne kadar uzaklaştığını tahmin et. Lastik çok mu gerildi? Fiyatın VWAP'a doğru bir düzeltme (Pullback) yapma olasılığı var mı? Aşırı alım veya aşırı satım bölgesinde miyiz?
-    
-    ## 14. 🎭 Piyasa Yapıcı Psikolojisi
-    *Tahtanın genel görünümüne bakarak 'Piyasa Yapıcı'nın (Market Maker) niyetini yorumla. Satış tarafına korkutma amaçlı yüklü Fake lotlar yazılmış olabilir mi? Alıcı tarafı bilerek mi zayıf bırakılmış (Mal toplamak için)? Yoksa gerçekten alıcı mı yok?
-    
-    ## 15. 🛑 Şeytanın Avukatı (Risk Analizi)
-    *Bana bu hisseyi almak için sebeplerimi sayma. NEDEN ALMAMALIYIM? Riskler neler? Görselde seni rahatsız eden, 'Gel Gel' operasyonu olabileceğine dair en ufak bir ipucu var mı? Eğer işler ters giderse, en mantıklı Stop Loss (Zarar Kes) seviyesi, hangi kademenin altıdır?
-    
-    ## 16. Likidite Avı (Liquidity Sweep)
-    *Fiyat, belirgin bir destek veya direnç seviyesinin altına/üstüne 'iğne atıp' hemen geri döndü mü? Bu hareket, sadece oradaki stop emirlerini patlatıp likidite toplamak için mi yapıldı? Eğer öyleyse, bu 'Fake Kırılım' sonrası ters yöne sert bir hareket (Ralli/Çöküş) beklemeli miyim?
-    
-    ## 17. 📊 "Point of Control (POC) ve Hacim Profili
-    *Görseldeki işlemlere bakarak, en çok hacmin döndüğü fiyat seviyesini (POC - Point of Control) tahmin et. Şu anki fiyat bu seviyenin üzerinde mi altında mı? Fiyat bu yoğun bölgeden hızla uzaklaşıyor mu (Kabul), yoksa sürekli oraya mı çekiliyor (Denge)? Fiyat POC'den uzaklaştıysa 'Dengesizlik' (Imbalance) trade'i fırsatı var mı?
-    
-    ## 18. 🏗️ "Adım Adım Mal Toplama (Step-Ladder)
-    *Derinlik ve gerçekleşen işlemlere bak. Fiyat düşmüyor ama her kademeye sistematik olarak küçük küçük (örn: 50, 100 lot) alışlar giriliyor mu? Bu, dikkat çekmeden mal toplayan bir 'Algoritmik Robot' (TWAP/VWAP botu) izi olabilir mi? Tahtada sinsi bir 'Emme' hareketi var mı?"
-    
-    ## 19. 🚦 "Dominant Taraf ve Delta Analizi
-    *Şu an tahtada gerçekleşen işlemlere bak (Time & Sales). İşlemler daha çok 'Satış Kademesinden' (Aktif Alış) mi geçiyor, yoksa 'Alış Kademesinden' (Aktif Satış) mi? Yani piyasa emri gönderenler ALICILAR mi SATICILAR mi? Delta (Net Alıcı - Net Satıcı) pozitif mi negatif mi? Kim daha agresif?
-    """ 
-    
+    ## ...
+    ## 20. 📏 KADEME YORUMU (PRICE LEVEL COMMENTARY)
+    """
     try:
         client = genai.Client(api_key=key)
         response = client.models.generate_content_stream(
             model=model_name,
             contents=["Görselleri analiz et."] + all_images,
-            config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION, max_output_tokens=99999)
+            config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION, max_output_tokens=8192)
         )
         for chunk in response:
             if chunk.text: yield chunk.text
@@ -275,48 +202,35 @@ def main():
         sel = st.selectbox("Bot:", list(BOT_CONFIGS.keys()), index=list(BOT_CONFIGS.keys()).index(current))
         if sel != current: st.session_state['selected_bot_key'] = sel; st.rerun()
         
-        # --- GEMINI KEY YÖNETİMİ ---
+        # --- KEY YÖNETİMİ ---
         st.divider()
-        st.subheader("🔑 Gemini API Keyler")
+        st.subheader("🔑 Gemini Keys")
+        keys_val = "\n".join(st.session_state['dynamic_key_pool'])
         
-        # Mevcut keyleri göster
-        current_keys = st.session_state['dynamic_key_pool']
-        keys_str = "\n".join(current_keys)
-        
-        # Düzenlenebilir alan
-        new_keys_str = st.text_area("Her satıra bir key:", value=keys_str, height=150)
-        
-        col_save, col_test = st.columns(2)
-        
-        if col_save.button("💾 Kaydet"):
-            key_list = new_keys_str.split('\n')
-            save_keys_to_disk(key_list)
-            st.rerun()
-
-        if col_test.button("🧪 Test Et"):
-            if not current_keys:
-                st.error("Test edilecek key yok!")
-            else:
-                st.info("Test Başlıyor...")
-                console = st.empty()
-                report = ""
-                for k in current_keys:
-                    mask = f"{k[:5]}...{k[-4:]}"
-                    # Flash Test
-                    try:
-                        c = genai.Client(api_key=k)
-                        c.models.generate_content(model="gemini-2.5-flash", contents="T", config=types.GenerateContentConfig(max_output_tokens=1))
-                        f_res = "✅"
-                    except: f_res = "❌"
-                    # Lite Test
-                    try:
-                        c = genai.Client(api_key=k)
-                        c.models.generate_content(model="gemini-2.5-flash-lite", contents="T", config=types.GenerateContentConfig(max_output_tokens=1))
-                        l_res = "✅"
-                    except: l_res = "❌"
-                    
-                    report += f"**{mask}** -> Flash: {f_res} | Lite: {l_res}\n\n"
-                console.markdown(report)
+        # Sadece Localde ise düzenle
+        if os.path.exists(LOCAL_KEY_FILE):
+            new_keys = st.text_area("Düzenle:", keys_val, height=150)
+            c_save, c_test = st.columns(2)
+            if c_save.button("💾 Kaydet"):
+                save_keys_to_disk(new_keys.split('\n'))
+                st.success("Kaydedildi!")
+                st.rerun()
+            if c_test.button("🧪 Test Et"):
+                if not st.session_state['dynamic_key_pool']: st.error("Key yok!")
+                else:
+                    st.info("Test...")
+                    con = st.empty(); rep = ""
+                    for k in st.session_state['dynamic_key_pool']:
+                        msk = f"{k[:5]}...{k[-4:]}"
+                        try:
+                            c = genai.Client(api_key=k)
+                            c.models.generate_content(model="gemini-2.5-flash", contents="T", config=types.GenerateContentConfig(max_output_tokens=1))
+                            res = "✅ OK"
+                        except: res = "❌ ERR"
+                        rep += f"**{msk}** -> {res}\n\n"
+                    con.markdown(rep)
+        else:
+            st.info("Cloud Modu: Keyler Secrets'tan yönetiliyor.")
 
     st.title(f"⚡ Scalper AI: {sel}")
     c1, c2 = st.columns(2)
@@ -324,8 +238,7 @@ def main():
     with c1:
         st.subheader("📡 Bot Kontrol")
         sym = st.text_input("Hisse Kodu:", value=st.session_state['telegram_flow']['symbol'], placeholder="THYAO", key="main_sym_input").upper()
-        if sym != st.session_state['telegram_flow']['symbol']:
-             st.session_state['telegram_flow']['symbol'] = sym
+        if sym != st.session_state['telegram_flow']['symbol']: st.session_state['telegram_flow']['symbol'] = sym
 
         cols = st.columns(4)
         for i, (lbl, cmd) in enumerate(BOT_CONFIGS[sel]["buttons"]):
@@ -333,25 +246,19 @@ def main():
         
         step = st.session_state['telegram_flow']['step']
         if step == 'processing':
-            st.info("İşleniyor...")
-            st.spinner("Bekleniyor...")
-            time.sleep(1)
-            st.rerun()
-            
+            st.info("İşleniyor..."); st.spinner("Bekleniyor..."); time.sleep(1); st.rerun()
         elif step == 'show_buttons':
             st.success("Seçim Yapın:")
             opts = st.session_state['telegram_flow']['options']
             bc = st.columns(2)
             for i, o in enumerate(opts):
                 if bc[i%2].button(o, key=f"b{i}"): send_user_selection(o)
-                
         elif step == 'upload_wait':
-            st.warning("⚠️ Mini-App Açıldı! SS yükleyin.")
+            st.warning("⚠️ Mini-App! SS yükleyin.")
             if st.button("İptal"): db.reference('bridge/request').update({'status': 'cancelled'}); st.rerun()
 
-        # --- X TARAYICI (GÖRSELDEKİ GİBİ) ---
-        st.divider()
-        st.subheader("𝕏 Tarayıcı")
+        # --- X TARAYICI ---
+        st.divider(); st.subheader("𝕏 Tarayıcı")
         x_sym = st.text_input("Kod:", value=sym if sym else "THYAO", key="x_in").upper()
         x_type = st.radio("Tip:", ["🔥 Geçmiş", "⏱️ Canlı"], key="x_type")
         x_date = st.date_input("Tarih", datetime.date.today(), key="x_date")
@@ -365,7 +272,6 @@ def main():
             qry = f"#{x_sym} lang:tr"
             url = f"https://x.com/search?q={quote(qry)}&src=typed_query&f=live"
             lbl = f"⏱️ {x_sym} Son Dakika"
-            
         st.link_button(lbl, url=url, use_container_width=True)
 
     with c2:
@@ -375,17 +281,14 @@ def main():
              db.reference('bridge/request').update({'status': 'manual_completed'})
              st.session_state['telegram_flow']['step'] = 'idle'
              st.rerun()
-        
         imgs = (up or []) + st.session_state['telegram_images']
         if imgs:
             st.image(imgs, width=150)
             if st.button("🧹 Temizle"): st.session_state['telegram_images'] = []; st.rerun()
-            
             mdl = st.radio("Model:", ["gemini-2.5-flash", "gemini-2.5-flash-lite"], horizontal=True)
             if st.button("ANALİZİ BAŞLAT 🚀", type="primary", use_container_width=True):
                 out = st.empty(); txt = ""
-                for ch in analyze_images_stream(imgs, mdl):
-                    txt += ch; out.markdown(txt)
+                for ch in analyze_images_stream(imgs, mdl): txt += ch; out.markdown(txt)
 
 if __name__ == "__main__":
     main()
