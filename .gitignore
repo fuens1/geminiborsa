@@ -1,0 +1,6 @@
+# Özel Anahtarlar - ASLA YÜKLEME
+firebase_key.json
+api_keys.txt
+*.session
+*.session-journal
+__pycache__/
