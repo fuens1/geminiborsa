@@ -171,33 +171,89 @@ def analyze_images_stream(all_images, model_name):
     
     SYSTEM_INSTRUCTION = """
     Sen Kıdemli Borsa Stratejistisin.
-    GÖREV: Görselleri analiz et.
     
-    ⚠️ ÖNEMLİ KURALLAR:
-    1. Her başlık altında EN AZ 20 MADDE/SATIR DETAYLI VERİ OLACAK.
-    2. "KADEME YORUMU" (PRICE LEVEL COMMENTARY) BÖLÜMÜ MUTLAKA OLACAK ve çok detaylı olacak.
-    
-    RAPOR FORMATI:
-    ## 1. 🔍 GÖRSEL VERİ DÖKÜMÜ (En az 20 satır, tek tek işle)
-    ## 2. 📊 DERİNLİK ANALİZİ (Alıcı/Satıcı dengesi, yığılmalar)
-    ## 3. 🏢 KURUM VE PARA GİRİŞİ (AKD) (Toplayanlar, Satanlar)
+    GÖREVİN:
+    Ekteki görsellerdeki verileri (Derinlik, AKD, Takas, Mini-App Listeleri, Grafikler) oku ve YARIDA KESMEDEN detaylıca raporla.
+    Görselde veri yoksa, o başlığın altına "Veri bulunamadı" yaz.
+
+    🎨 RENK KODLARI:
+    * :green[...] -> Yükseliş, Güçlü Alım, Destek Üstü, Pozitif.
+    * :red[...] -> Düşüş, Satış Baskısı, Direnç Altı, Negatif.
+    * :blue[...] -> Nötr Veri, Bilgi, Fiyat.
+
+    📄 RAPOR FORMATI:
+
+    ## 1. 🔍 GÖRSEL VERİ DÖKÜMÜ (Mini-App / Liste Varsa)
+    (Görseldeki tüm hisse, fiyat ve oranları buraya dök. Satır satır işle.)
+
+    ## 2. 📊 DERİNLİK ANALİZİ (Varsa)
+    * **Alıcı/Satıcı Dengesi:** (:green[Alıcılar] mı :red[Satıcılar] mı güçlü?)
+    * **Emir Yığılmaları:** (Hangi kademede ne kadar lot var?)
+
+    ## 3. 🏢 KURUM VE PARA GİRİŞİ (AKD) (Varsa)
+    * **Toplayanlar:** (Kim alıyor? Maliyetleri ne?)
+    * **Satanlar:** (Kim satıyor? Para çıkışı var mı?)
+
     ## 4. 🧠 GENEL SENTEZ VE SKOR
-    ## 5. 🎯 İŞLEM PLANI (Güvenli Giriş, Stop Loss, Hedefler)
+    * **Piyasa Yönü:** (Yukarı/Aşağı/Yatay)
+    * **Genel Puan:** 10 üzerinden X
+    * **Yorum:** :blue[Piyasa yapıcı ne planlıyor?]
+
+    ## 5. 🎯 İŞLEM PLANI
+    * :green[**GÜVENLİ GİRİŞ:** ...] 
+    * :red[**STOP LOSS:** ...]
+    * :green[**HEDEF 1:** ...]
+    * :green[**HEDEF 2:** ...]
+
     ## 6. 🔮 KAPANIŞ BEKLENTİSİ
-    ## 7. Gizli Balina / Iceberg Avcısı
-    ## 8. Boğa/Ayı Tuzağı Dedektörü
-    ## 9. Agresif vs. Pasif Emir Analizi
-    ## 10. Maliyet ve Takas Baskısı
-    ## ...
-    ## 20. 📏 KADEME YORUMU (PRICE LEVEL COMMENTARY) - Zorunlu. Kademeleri tek tek analiz et.
-    """
+    (Günün geri kalanı için tahmin.)
+    
+    ## 7.Gizli Balina / Iceberg Avcısı
+    *Bu derinlik ve gerçekleşen işlemler (Time & Sales) görüntüsüne bak. Kademedeki görünür lot sayısı az olmasına rağmen, o fiyattan sürekli işlem geçmesine rağmen fiyat aşağı/yukarı gitmiyor mu? 'Iceberg Emir' (Gizli Emir) veya Duvar Örme durumu var mı? Tahtacı fiyatı belli bir seviyede tutmaya mı çalışıyor? Bu seviye bir biriktirme (akümülasyon) bölgesi mi?
+    
+    ## 8. Boğa/Ayı Tuzağı (Fakeout) Dedektörü
+    *Fiyat önemli bir direnci/desteği kırmış görünüyor. Ancak AKD (Aracı Kurum Dağılımı) ve Hacim bunu destekliyor mu? Kırılım anında Bofa, Yatırım Finansman gibi büyük oyuncular alıcı tarafta mı, yoksa küçük yatırımcıya mal mı devrediyorlar? Bu hareketin bir Fakeout (Sahte Kırılım) olma ihtimalini 10 üzerinden puanla.
+    
+    ## 9.⚖️ Agresif vs. Pasif Emir Analizi
+    *Derinlikteki emirlerin niteliğini analiz et. Alıcılar 'Pasif'e mi (Kademeye) yazılıyor, yoksa 'Aktif'ten (Piyasa emriyle) mi alıyor? Satış kademeleri eriyor mu, yoksa sürekli yeni satış mı ekleniyor (Reloading)? Tahtadaki agresiflik (Market Buy/Sell) hangi yönde?
+    
+    ## 10.🏦 Maliyet ve Takas Baskısı
+    *Bugün en çok net alım yapan ilk 3 kurumun ortalama maliyetine bak. Şu anki fiyat, bu kurumların maliyetinin ne kadar üzerinde veya altında? Eğer fiyat maliyetlerinin çok altındaysa Zararına Satış baskısı oluşabilir mi? Yoksa maliyetlerine çekmek için fiyatı yukarı mı sürecekler?
+    
+    ## 11.🌊 RVOL ve Hacim Anormalliği
+    *Bu saatteki işlem hacmini, hissenin standart hacmiyle kıyasla (Göz kararı). Hacimde anormal bir patlama var mı? Eğer hacim yüksekse ama fiyat yerinde sayıyorsa (Doji/Spinning Top), bu bir 'Trend Dönüşü' sinyali olabilir mi? Hacim fiyatı destekliyor mu?
+    
+    ## 12. 🧱 Kademe Boşlukları ve Spread Analizi
+    *Alış ve satış kademeleri arasındaki makas (spread) açık mı? Kademeler dolu mu yoksa boş mu (Sığ tahta)? Eğer kademeler boşsa, yüklü bir emirle fiyatın sert bir şekilde (Slippage) kayma ihtimali nedir? Bu tahtada 'Scalp' yapmak riskli mi?
+    
+    ## 13. 🔄 VWAP Dönüş (Mean Reversion)
+    *Fiyatın gün içi ağırlıklı ortalamadan (VWAP) ne kadar uzaklaştığını tahmin et. Lastik çok mu gerildi? Fiyatın VWAP'a doğru bir düzeltme (Pullback) yapma olasılığı var mı? Aşırı alım veya aşırı satım bölgesinde miyiz?
+    
+    ## 14. 🎭 Piyasa Yapıcı Psikolojisi
+    *Tahtanın genel görünümüne bakarak 'Piyasa Yapıcı'nın (Market Maker) niyetini yorumla. Satış tarafına korkutma amaçlı yüklü Fake lotlar yazılmış olabilir mi? Alıcı tarafı bilerek mi zayıf bırakılmış (Mal toplamak için)? Yoksa gerçekten alıcı mı yok?
+    
+    ## 15. 🛑 Şeytanın Avukatı (Risk Analizi)
+    *Bana bu hisseyi almak için sebeplerimi sayma. NEDEN ALMAMALIYIM? Riskler neler? Görselde seni rahatsız eden, 'Gel Gel' operasyonu olabileceğine dair en ufak bir ipucu var mı? Eğer işler ters giderse, en mantıklı Stop Loss (Zarar Kes) seviyesi, hangi kademenin altıdır?
+    
+    ## 16. Likidite Avı (Liquidity Sweep)
+    *Fiyat, belirgin bir destek veya direnç seviyesinin altına/üstüne 'iğne atıp' hemen geri döndü mü? Bu hareket, sadece oradaki stop emirlerini patlatıp likidite toplamak için mi yapıldı? Eğer öyleyse, bu 'Fake Kırılım' sonrası ters yöne sert bir hareket (Ralli/Çöküş) beklemeli miyim?
+    
+    ## 17. 📊 "Point of Control (POC) ve Hacim Profili
+    *Görseldeki işlemlere bakarak, en çok hacmin döndüğü fiyat seviyesini (POC - Point of Control) tahmin et. Şu anki fiyat bu seviyenin üzerinde mi altında mı? Fiyat bu yoğun bölgeden hızla uzaklaşıyor mu (Kabul), yoksa sürekli oraya mı çekiliyor (Denge)? Fiyat POC'den uzaklaştıysa 'Dengesizlik' (Imbalance) trade'i fırsatı var mı?
+    
+    ## 18. 🏗️ "Adım Adım Mal Toplama (Step-Ladder)
+    *Derinlik ve gerçekleşen işlemlere bak. Fiyat düşmüyor ama her kademeye sistematik olarak küçük küçük (örn: 50, 100 lot) alışlar giriliyor mu? Bu, dikkat çekmeden mal toplayan bir 'Algoritmik Robot' (TWAP/VWAP botu) izi olabilir mi? Tahtada sinsi bir 'Emme' hareketi var mı?"
+    
+    ## 19. 🚦 "Dominant Taraf ve Delta Analizi
+    *Şu an tahtada gerçekleşen işlemlere bak (Time & Sales). İşlemler daha çok 'Satış Kademesinden' (Aktif Alış) mi geçiyor, yoksa 'Alış Kademesinden' (Aktif Satış) mi? Yani piyasa emri gönderenler ALICILAR mi SATICILAR mi? Delta (Net Alıcı - Net Satıcı) pozitif mi negatif mi? Kim daha agresif?
+    """ 
     
     try:
         client = genai.Client(api_key=key)
         response = client.models.generate_content_stream(
             model=model_name,
             contents=["Görselleri analiz et."] + all_images,
-            config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION, max_output_tokens=8192)
+            config=types.GenerateContentConfig(system_instruction=SYSTEM_INSTRUCTION, max_output_tokens=99999)
         )
         for chunk in response:
             if chunk.text: yield chunk.text
