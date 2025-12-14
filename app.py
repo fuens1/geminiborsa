@@ -65,27 +65,40 @@ if not st.session_state['dynamic_key_pool']:
     st.session_state['dynamic_key_pool'] = load_keys()
 
 # ==========================================
-# 🔥 FIREBASE INIT (GÖMÜLÜ ANAHTAR - GARANTİ)
+# 🔥 FIREBASE INIT (GÜVENLİ & DİNAMİK)
 # ==========================================
 def init_firebase():
+    # Eğer zaten bağlantı varsa tekrar etme
     if len(firebase_admin._apps) > 0: return
+
     try:
-        # SENİN ANAHTARIN BURADA
-        key_dict = {
-          "type": "service_account",
-          "project_id": "geminiborsa-f9a80",
-          "private_key_id": "48b5d78f516302263727053dc5a870bd5f920ac4",
-          "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCow86o1O7cUyWI\nCUFF23sEG7fEMbUt+Owahc14TfLiucZAbe0MyWtrvYX64tAC8JEFwpnzMdz3Cxq+\n0N3Kv/k6DopGgUo6PIPwwRDOqrvRA37FKvo0iV+QgG/kx9rL5xelaeXZcxTDdjWw\nTO9FbDhsJThGFVnTpkqWYEtUx6j6IIRTtBRSMA85suusKJqUpIWlX3Rjb/xPVbgU\nPlQK6Kd00AYGNFgEqqsFr0JzjR1ttmwlkR6h1l3N34DjcDW4mjgR6qToBzrFQYx5\niuObh9nlODi8lGo2S9c9RJJyJJyNwfsJ+33JEIY0bWtv14Yd5jiwiWsHMYG0Tgjf\nU9HStrU3AgMBAAECggEACAz3Mc9JPxIUVe34bX2v251QNzgWfYVEthXbRw7o3u9K\ndCO0+DQvlKnWLLFfMj9e8QMR1wEc77Ku6Zq1yd3oj2AcMTV/tfwnCyLFS3vnjmv3\n7diZVkzrVc2wCMjj43A4YjgFXUnZHA3qjRN5IpBWt19Qf5S10/E4g6iU+gwK6oue\nAV9CuefdxjPmUWaXXG295NBt+YpYoQ+XD7P2KtRwSX1o+vMSSQg3BpMfvsUKYBAe\nE2XzfXMYGD+OXitlUDI1ydb2GO1dQoK/te0c51LEvm0TpmesiUdlFaag5OW8+arS\nbZ+jrxJqwkP0tWoYkYTSY7nrOWo+kkxsq1+xQ70SeQKBgQDgB+ccOOskDjcq2T84\ngdreAuHZADCvin4rlZrpL5snbwpyRE6sWkmMmqe3S2QIPA7JpMSf4x2k+oypCcsi\nQkQzInBqHNKbbupqmIcJlBfNrfQOqq9p0G8MjwBjqGwi9SaYqTWOjdXvB41dF6jy\niJeM0qK7QGSCcHI+Yi8Yx7r1AwKBgQDA2PnchGGF0VrK8/kt2zvip9dey5Hhd1Ve\nbIo1GkABu/2oQPqBNpuGgt+AvSd84RgbL8/xg9pcBYw4sCYBZilrpH3BgPrZ0D09\nEGnk90dRa40JKtDO3H4FXHyVkLRBMt4j3Py+uXXHrWBRRNGHd+7mj5EC+MRRg92f\nUxtV7TtGvQKBgH1PrlQ4+j4WvYD4N8axy+z3C8FHu/PUsbJLYnUgrdam4976mk8J\nya4eK8X5I6D/hv3/bgRJE6Hei6NZ2Qf2rRM1JlAUgzFyHyk03APdlFr1/Fff3XKA\npj0OGBemc6YyHj6yF0T/zTSAsu/pdhUDllGs2F2JLS9RGnYOkW14+vhlAoGAG7jV\nKkMJdeAjihtKTbI/SJTSG/ltjhjGd91ofLu6ScWJcD9vA1YjQ1Ha6TnHzGbbPUVB\nQjmvER1nC9sei4LxH101CrUM2nTZ6MZMQrLdWLH6Q0AZZjNCFmk2K5Xyo5C5aDRj\nTNOCP+MHfodDC5NND23B7chvCDzJhha/TjndFI0CgYEAspHPEXIs6pA6T4idbI4f\n9WISoqmvRlzs/Z8FWJbx5bqx2+xRgkgR5muCsXeFvF4Tna87iR1cLixbIpQuMqO4\nHOkJUafdWoU7fhAOghLffjfoBLvjSW487T9LiUPUwWq/CXhN/C/KZhw4IXmaTg18\nCxzdYHfdIjV7q7QP0hEhF9w=\n-----END PRIVATE KEY-----\n",
-          "client_email": "firebase-adminsdk-fbsvc@geminiborsa-f9a80.iam.gserviceaccount.com",
-          "client_id": "111579891187704340858",
-          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-          "token_uri": "https://oauth2.googleapis.com/token",
-          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-          "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40geminiborsa-f9a80.iam.gserviceaccount.com",
-          "universe_domain": "googleapis.com"
-        }
-        cred = credentials.Certificate(key_dict)
-        firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
+        cred = None
+
+        # 1. YÖNTEM: Streamlit Cloud Secrets (Bulut için)
+        # Github'a yüklediğinde burayı kullanacak.
+        if "firebase" in st.secrets and "text_key" in st.secrets["firebase"]:
+            try:
+                # Secrets'taki metni JSON'a çevir
+                key_content = st.secrets["firebase"]["text_key"]
+                cred_info = json.loads(key_content, strict=False)
+                cred = credentials.Certificate(cred_info)
+            except Exception as json_err:
+                st.error(f"Secrets JSON Format Hatası: {json_err}")
+                st.stop()
+
+        # 2. YÖNTEM: Yerel Dosya (PC için)
+        # Bilgisayarında çalıştırırken klasördeki dosyayı kullanacak.
+        elif os.path.exists("firebase_key.json"):
+            cred = credentials.Certificate("firebase_key.json")
+
+        # Bağlantıyı Kur
+        if cred:
+            firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
+        else:
+            st.error("⚠️ Firebase Anahtarı Bulunamadı!")
+            st.info("Lütfen şunlardan birini yapın:\n1. Bilgisayardaysanız: 'firebase_key.json' dosyasını klasöre atın.\n2. Cloud'daysanız: Secrets ayarlarını [firebase] text_key=... şeklinde yapın.")
+            st.stop()
+
     except Exception as e:
         st.error(f"Firebase Bağlantı Hatası: {e}")
         st.stop()
