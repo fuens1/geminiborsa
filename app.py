@@ -36,38 +36,51 @@ BOT_CONFIGS = {
     "b0pt": {"username": "@b0pt_bot", "buttons": [("📊 Derinlik", "derinlik"), ("🏢 AKD", "akd"), ("🔢 Teorik", "teorik"), ("📚 Tüm Veriler", "tumu"), ("🔄 Takas", "takas"), ("📏 Kademe", "kademe"), ("📉 Grafik", "grafik"), ("🏦 Genel AKD", "genelakd"), ("🏢 Kurum Analizi", "kurum"), ("🔢 Teorik Yükselen - Düşen", "teorikyd"), ("📈 Piyasa Yükselen - Düşen", "piyasayd"), ("🇺🇸 Bofa Analizi", "bofa")]}
 }
 
-# --- INIT ---
+# --- SESSION BAŞLATMA ---
 if 'telegram_flow' not in st.session_state: st.session_state['telegram_flow'] = {'step': 'idle', 'symbol': '', 'options': []}
 if 'telegram_images' not in st.session_state: st.session_state['telegram_images'] = []
 if 'key_index' not in st.session_state: st.session_state['key_index'] = 0
 if 'dynamic_key_pool' not in st.session_state: st.session_state['dynamic_key_pool'] = []
 if 'selected_bot_key' not in st.session_state: st.session_state['selected_bot_key'] = "xFinans"
 
-# --- KEY MANAGEMENT ---
-# Localdeki api_keys.txt varsa oku
-if os.path.exists(LOCAL_KEY_FILE) and not st.session_state['dynamic_key_pool']:
-    with open(LOCAL_KEY_FILE, "r") as f:
-        st.session_state['dynamic_key_pool'] = [k.strip() for k in f.read().split('\n') if k.strip()]
-
-# Cloud için: Secrets varsa oradan da oku
-if not st.session_state['dynamic_key_pool'] and "gemini" in st.secrets:
-    if "api_keys" in st.secrets["gemini"]:
-        st.session_state['dynamic_key_pool'] = st.secrets["gemini"]["api_keys"]
+# ==========================================
+# 🔑 KEY YÖNETİMİ (PC + CLOUD UYUMLU)
+# ==========================================
+def load_keys():
+    keys = []
+    # 1. Önce PC'deki dosyaya bak
+    if os.path.exists(LOCAL_KEY_FILE):
+        with open(LOCAL_KEY_FILE, "r", encoding="utf-8") as f:
+            keys = [k.strip() for k in f.read().split('\n') if k.strip()]
+    
+    # 2. Dosya boşsa veya yoksa Secrets'a bak (Cloud için)
+    if not keys and "gemini" in st.secrets and "api_keys" in st.secrets["gemini"]:
+        keys = st.secrets["gemini"]["api_keys"]
+    
+    return keys
 
 def save_keys_to_disk(keys_list):
     clean_keys = [k.strip() for k in keys_list if k.strip()]
-    # Sadece localde dosyaya yazabiliriz
-    if os.path.exists(LOCAL_KEY_FILE):
-        with open(LOCAL_KEY_FILE, "w") as f: f.write("\n".join(clean_keys))
-    st.session_state['dynamic_key_pool'] = clean_keys
+    # Sadece PC'de dosyaya yazar
+    try:
+        with open(LOCAL_KEY_FILE, "w", encoding="utf-8") as f:
+            f.write("\n".join(clean_keys))
+        st.session_state['dynamic_key_pool'] = clean_keys
+        st.toast("Keyler api_keys.txt dosyasına kaydedildi!", icon="💾")
+    except Exception as e:
+        st.error(f"Kaydetme hatası: {e}")
+
+# Uygulama açılışında keyleri yükle
+if not st.session_state['dynamic_key_pool']:
+    st.session_state['dynamic_key_pool'] = load_keys()
 
 # ==========================================
-# 🔥 FIREBASE INIT (HARDCODED - GARANTİ ÇÖZÜM)
+# 🔥 FIREBASE INIT (HARDCODED - SENİN KEY)
 # ==========================================
 def init_firebase():
     if len(firebase_admin._apps) > 0: return
     try:
-        # SENİN VERDİĞİN KEY BURAYA GÖMÜLDÜ 👇
+        # GÜVENLİK NOTU: Bu key kodun içinde. GitHub'a atarsan repo PRIVATE olsun.
         key_dict = {
           "type": "service_account",
           "project_id": "geminiborsa-f9a80",
@@ -81,10 +94,8 @@ def init_firebase():
           "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40geminiborsa-f9a80.iam.gserviceaccount.com",
           "universe_domain": "googleapis.com"
         }
-        
         cred = credentials.Certificate(key_dict)
         firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
-        
     except Exception as e:
         st.error(f"Firebase Bağlantı Hatası: {e}")
         st.stop()
@@ -155,10 +166,9 @@ def check_firebase_status():
 # ==========================================
 def analyze_images_stream(all_images, model_name):
     pool = st.session_state['dynamic_key_pool']
-    if not pool: yield "API Key yok! Lütfen api_keys.txt dosyasına key ekleyin."; return
+    if not pool: yield "⚠️ HATA: API Key bulunamadı! Lütfen ayarlardan Gemini API Key ekleyin."; return
     key = pool[st.session_state['key_index'] % len(pool)]
     
-    # SENİN İSTEDİĞİN ÖZEL HAFIZA TALİMATLARI BURADA
     SYSTEM_INSTRUCTION = """
     Sen Kıdemli Borsa Stratejistisin.
     GÖREV: Görselleri analiz et.
@@ -209,44 +219,48 @@ def main():
         sel = st.selectbox("Bot:", list(BOT_CONFIGS.keys()), index=list(BOT_CONFIGS.keys()).index(current))
         if sel != current: st.session_state['selected_bot_key'] = sel; st.rerun()
         
-        st.subheader("Gemini Keys")
-        keys_val = "\n".join(st.session_state['dynamic_key_pool'])
+        # --- GEMINI KEY YÖNETİMİ ---
+        st.divider()
+        st.subheader("🔑 Gemini API Keyler")
         
-        # Localde ise düzenleme kutusu göster
-        if os.path.exists(LOCAL_KEY_FILE):
-            new_keys = st.text_area("Düzenle:", keys_val, height=150)
-            col_save, col_test = st.columns(2)
-            if col_save.button("💾 Kaydet"):
-                save_keys_to_disk(new_keys.split('\n'))
-                st.success("Kaydedildi!")
-                st.rerun()
-        else:
-            # Cloud'da ise sadece bilgi ve test butonu
-            st.info(f"Yüklü Key Sayısı: {len(st.session_state['dynamic_key_pool'])}")
-            col_test = st.container()
+        # Mevcut keyleri göster
+        current_keys = st.session_state['dynamic_key_pool']
+        keys_str = "\n".join(current_keys)
+        
+        # Düzenlenebilir alan
+        new_keys_str = st.text_area("Her satıra bir key:", value=keys_str, height=150)
+        
+        col_save, col_test = st.columns(2)
+        
+        if col_save.button("💾 Kaydet"):
+            key_list = new_keys_str.split('\n')
+            save_keys_to_disk(key_list)
+            st.rerun()
 
-        if col_test.button("🔑 Key Test"):
-            pool = st.session_state['dynamic_key_pool']
-            if not pool:
-                st.error("Key yok!")
+        if col_test.button("🧪 Test Et"):
+            if not current_keys:
+                st.error("Test edilecek key yok!")
             else:
-                test_console = st.container(border=True)
-                test_console.write("🔎 **API Key Kontrolü Başlıyor...**")
-                for k in pool:
-                    mask_k = f"{k[:6]}...{k[-4:]}"
+                st.info("Test Başlıyor...")
+                console = st.empty()
+                report = ""
+                for k in current_keys:
+                    mask = f"{k[:5]}...{k[-4:]}"
+                    # Flash Test
                     try:
                         c = genai.Client(api_key=k)
                         c.models.generate_content(model="gemini-2.5-flash", contents="T", config=types.GenerateContentConfig(max_output_tokens=1))
-                        f_stat = "✅ Flash: OK"
-                    except: f_stat = "❌ Flash: ERR"
-                    
+                        f_res = "✅"
+                    except: f_res = "❌"
+                    # Lite Test
                     try:
                         c = genai.Client(api_key=k)
                         c.models.generate_content(model="gemini-2.5-flash-lite", contents="T", config=types.GenerateContentConfig(max_output_tokens=1))
-                        l_stat = "✅ Lite: OK"
-                    except: l_stat = "❌ Lite: ERR"
+                        l_res = "✅"
+                    except: l_res = "❌"
                     
-                    test_console.markdown(f"**{mask_k}** | {f_stat} | {l_stat}")
+                    report += f"**{mask}** -> Flash: {f_res} | Lite: {l_res}\n\n"
+                console.markdown(report)
 
     st.title(f"⚡ Scalper AI: {sel}")
     c1, c2 = st.columns(2)
@@ -279,7 +293,7 @@ def main():
             st.warning("⚠️ Mini-App Açıldı! SS yükleyin.")
             if st.button("İptal"): db.reference('bridge/request').update({'status': 'cancelled'}); st.rerun()
 
-        # --- X TARAYICI (SENİN İSTEDİĞİN GİBİ) ---
+        # --- X TARAYICI (GÖRSELDEKİ GİBİ) ---
         st.divider()
         st.subheader("𝕏 Tarayıcı")
         x_sym = st.text_input("Kod:", value=sym if sym else "THYAO", key="x_in").upper()
