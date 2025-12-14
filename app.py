@@ -13,14 +13,14 @@ try:
     from google import genai
     from google.genai import types
 except ImportError:
-    st.error("Google GenAI eksik. pip install google-genai")
+    st.error("Google GenAI eksik. Terminale şunu yaz: pip install google-genai")
     st.stop()
 
 try:
     import firebase_admin
     from firebase_admin import credentials, db
 except ImportError:
-    st.error("Firebase Admin eksik. pip install firebase-admin")
+    st.error("Firebase Admin eksik. Terminale şunu yaz: pip install firebase-admin")
     st.stop()
 
 # ==========================================
@@ -48,11 +48,9 @@ if 'selected_bot_key' not in st.session_state: st.session_state['selected_bot_ke
 # ==========================================
 def load_keys():
     keys = []
-    # 1. Önce PC'deki dosyaya bak
     if os.path.exists(LOCAL_KEY_FILE):
         with open(LOCAL_KEY_FILE, "r", encoding="utf-8") as f:
             keys = [k.strip() for k in f.read().split('\n') if k.strip()]
-    # 2. Dosya yoksa Secrets'a bak (Cloud)
     if not keys and "gemini" in st.secrets and "api_keys" in st.secrets["gemini"]:
         keys = st.secrets["gemini"]["api_keys"]
     return keys
@@ -67,12 +65,12 @@ if not st.session_state['dynamic_key_pool']:
     st.session_state['dynamic_key_pool'] = load_keys()
 
 # ==========================================
-# 🔥 FIREBASE INIT (GÖMÜLÜ ANAHTAR)
+# 🔥 FIREBASE INIT (GÖMÜLÜ ANAHTAR - GARANTİ)
 # ==========================================
 def init_firebase():
     if len(firebase_admin._apps) > 0: return
     try:
-        # ANAHTAR BURADA (Secrets ayarına gerek yok)
+        # SENİN ANAHTARIN BURADA
         key_dict = {
           "type": "service_account",
           "project_id": "geminiborsa-f9a80",
@@ -161,20 +159,89 @@ def analyze_images_stream(all_images, model_name):
     if not pool: yield "⚠️ HATA: API Key yok! Ayarlardan ekleyin."; return
     key = pool[st.session_state['key_index'] % len(pool)]
     
+    # SENİN GÖNDERDİĞİN (YARIM KALAN) PROMPT TAMAMLANDI:
     SYSTEM_INSTRUCTION = """
     Sen Kıdemli Borsa Stratejistisin.
-    GÖREV: Görselleri analiz et.
-    ⚠️ KURALLAR: Her başlık altında EN AZ 20 MADDE ve KADEME YORUMU (ZORUNLU).
     
-    RAPOR FORMATI:
-    ## 1. 🔍 GÖRSEL VERİ DÖKÜMÜ
-    ## 2. 📊 DERİNLİK ANALİZİ
-    ## 3. 🏢 KURUM VE PARA GİRİŞİ
-    ## 4. 🧠 GENEL SENTEZ
+    GÖREVİN:
+    Ekteki görsellerdeki verileri (Derinlik, AKD, Takas, Mini-App Listeleri, Grafikler) oku ve YARIDA KESMEDEN detaylıca raporla.
+    Görselde veri yoksa, o başlığın altına "Veri bulunamadı" yaz.
+
+    🎨 RENK KODLARI:
+    * :green[...] -> Yükseliş, Güçlü Alım, Destek Üstü, Pozitif.
+    * :red[...] -> Düşüş, Satış Baskısı, Direnç Altı, Negatif.
+    * :blue[...] -> Nötr Veri, Bilgi, Fiyat.
+
+    📄 RAPOR FORMATI:
+
+    ## 1. 🔍 GÖRSEL VERİ DÖKÜMÜ (Mini-App / Liste Varsa)
+    (Görseldeki tüm hisse, fiyat ve oranları buraya dök. Satır satır işle. EN AZ 20 SATIR)
+
+    ## 2. 📊 DERİNLİK ANALİZİ (Varsa)
+    * **Alıcı/Satıcı Dengesi:** (:green[Alıcılar] mı :red[Satıcılar] mı güçlü?)
+    * **Emir Yığılmaları:** (Hangi kademede ne kadar lot var?)
+
+    ## 3. 🏢 KURUM VE PARA GİRİŞİ (AKD) (Varsa)
+    * **Toplayanlar:** (Kim alıyor? Maliyetleri ne?)
+    * **Satanlar:** (Kim satıyor? Para çıkışı var mı?)
+
+    ## 4. 🧠 GENEL SENTEZ VE SKOR
+    * **Piyasa Yönü:** (Yukarı/Aşağı/Yatay)
+    * **Genel Puan:** 10 üzerinden X
+    * **Yorum:** :blue[Piyasa yapıcı ne planlıyor?]
+
     ## 5. 🎯 İŞLEM PLANI
-    ## ...
+    * :green[**GÜVENLİ GİRİŞ:** ...] 
+    * :red[**STOP LOSS:** ...]
+    * :green[**HEDEF 1:** ...]
+    * :green[**HEDEF 2:** ...]
+
+    ## 6. 🔮 KAPANIŞ BEKLENTİSİ
+    (Günün geri kalanı için tahmin.)
+    
+    ## 7.Gizli Balina / Iceberg Avcısı
+    *Bu derinlik ve gerçekleşen işlemler (Time & Sales) görüntüsüne bak. Kademedeki görünür lot sayısı az olmasına rağmen, o fiyattan sürekli işlem geçmesine rağmen fiyat aşağı/yukarı gitmiyor mu?
+    
+    ## 8. Boğa/Ayı Tuzağı (Fakeout) Dedektörü
+    *Fiyat önemli bir direnci/desteği kırmış görünüyor. Ancak AKD (Aracı Kurum Dağılımı) ve Hacim bunu destekliyor mu? Kırılım anında Bofa, Yatırım Finansman gibi büyük oyuncular alıcı tarafta mı, yoksa küçük yatırımcıya mal mı devrediyorlar?
+    
+    ## 9.⚖️ Agresif vs. Pasif Emir Analizi
+    *Derinlikteki emirlerin niteliğini analiz et. Alıcılar 'Pasif'e mi yazılıyor, yoksa 'Aktif'ten mi alıyor?
+    
+    ## 10.🏦 Maliyet ve Takas Baskısı
+    *Bugün en çok net alım yapan ilk 3 kurumun ortalama maliyeti nedir?
+    
+    ## 11.🌊 RVOL ve Hacim Anormalliği
+    *Hacimde anormal bir patlama var mı?
+    
+    ## 12. 🧱 Kademe Boşlukları ve Spread Analizi
+    *Alış ve satış kademeleri arasındaki makas (spread) açık mı?
+    
+    ## 13. 🔄 VWAP Dönüş (Mean Reversion)
+    *Fiyatın gün içi ağırlıklı ortalamadan (VWAP) ne kadar uzakta?
+    
+    ## 14. 🎭 Piyasa Yapıcı Psikolojisi
+    *Tahtanın genel görünümüne bakarak 'Piyasa Yapıcı'nın niyetini yorumla.
+    
+    ## 15. 🛑 Şeytanın Avukatı (Risk Analizi)
+    *NEDEN ALMAMALIYIM? Riskler neler?
+    
+    ## 16. Likidite Avı (Liquidity Sweep)
+    *Stop patlatma hareketi var mı?
+    
+    ## 17. 📊 "Point of Control (POC) ve Hacim Profili
+    *En çok hacmin döndüğü fiyat seviyesi neresi?
+    
+    ## 18. 🏗️ "Adım Adım Mal Toplama (Step-Ladder)
+    *Robotik, sistematik alımlar var mı?
+    
+    ## 19. 🚦 "Dominant Taraf ve Delta Analizi
+    *Delta (Net Alıcı - Net Satıcı) pozitif mi negatif mi?
+    
     ## 20. 📏 KADEME YORUMU (PRICE LEVEL COMMENTARY)
-    """
+    *(Bu bölüm ZORUNLUDUR. Fiyat kademelerini tek tek incele. Hangi kademede duvar var, hangi kademe boş? En az 20 madde.)
+    """ 
+    
     try:
         client = genai.Client(api_key=key)
         response = client.models.generate_content_stream(
@@ -202,20 +269,19 @@ def main():
         sel = st.selectbox("Bot:", list(BOT_CONFIGS.keys()), index=list(BOT_CONFIGS.keys()).index(current))
         if sel != current: st.session_state['selected_bot_key'] = sel; st.rerun()
         
-        # --- KEY YÖNETİMİ ---
+        # --- GEMINI KEY YÖNETİMİ ---
         st.divider()
         st.subheader("🔑 Gemini Keys")
         keys_val = "\n".join(st.session_state['dynamic_key_pool'])
         
-        # Sadece Localde ise düzenle
         if os.path.exists(LOCAL_KEY_FILE):
             new_keys = st.text_area("Düzenle:", keys_val, height=150)
-            c_save, c_test = st.columns(2)
-            if c_save.button("💾 Kaydet"):
+            col_save, col_test = st.columns(2)
+            if col_save.button("💾 Kaydet"):
                 save_keys_to_disk(new_keys.split('\n'))
                 st.success("Kaydedildi!")
                 st.rerun()
-            if c_test.button("🧪 Test Et"):
+            if col_test.button("🧪 Test Et"):
                 if not st.session_state['dynamic_key_pool']: st.error("Key yok!")
                 else:
                     st.info("Test...")
