@@ -27,8 +27,7 @@ except ImportError:
 # ⚙️ AYARLAR
 # ==========================================
 FIREBASE_DB_URL = "https://geminiborsa-f9a80-default-rtdb.firebaseio.com/"
-LOCAL_KEY_FILE = "api_keys.txt"      
-FIREBASE_JSON_FILE = "firebase_key.json"
+LOCAL_KEY_FILE = "api_keys.txt"
 
 BOT_CONFIGS = {
     "xFinans": {"username": "@xFinans_bot", "buttons": [("📊 Derinlik", "derinlik"), ("🔢 Teorik", "teorik"), ("🏢 AKD", "akd"), ("📈 Yükselen/Düşen", "yukselendusen"), ("📜 Teorik Liste", "teorikliste"), ("📡 Sinyal", "sinyal")]},
@@ -44,47 +43,48 @@ if 'key_index' not in st.session_state: st.session_state['key_index'] = 0
 if 'dynamic_key_pool' not in st.session_state: st.session_state['dynamic_key_pool'] = []
 if 'selected_bot_key' not in st.session_state: st.session_state['selected_bot_key'] = "xFinans"
 
-# --- KEY MANAGEMENT (HİBRİT) ---
-def load_keys():
-    # 1. Önce Yerel Dosyaya Bak
-    if os.path.exists(LOCAL_KEY_FILE):
-        with open(LOCAL_KEY_FILE, "r") as f:
-            return [k.strip() for k in f.read().split('\n') if k.strip()]
-    # 2. Yoksa Secrets'a Bak (Cloud için)
-    elif "gemini" in st.secrets and "api_keys" in st.secrets["gemini"]:
-        return st.secrets["gemini"]["api_keys"]
-    return []
+# --- KEY MANAGEMENT ---
+# Localdeki api_keys.txt varsa oku
+if os.path.exists(LOCAL_KEY_FILE) and not st.session_state['dynamic_key_pool']:
+    with open(LOCAL_KEY_FILE, "r") as f:
+        st.session_state['dynamic_key_pool'] = [k.strip() for k in f.read().split('\n') if k.strip()]
 
-if not st.session_state['dynamic_key_pool']:
-    st.session_state['dynamic_key_pool'] = load_keys()
+# Cloud için: Secrets varsa oradan da oku
+if not st.session_state['dynamic_key_pool'] and "gemini" in st.secrets:
+    if "api_keys" in st.secrets["gemini"]:
+        st.session_state['dynamic_key_pool'] = st.secrets["gemini"]["api_keys"]
 
 def save_keys_to_disk(keys_list):
     clean_keys = [k.strip() for k in keys_list if k.strip()]
-    # Sadece PC'de ise kaydet
-    if os.path.exists(LOCAL_KEY_FILE) or not st.secrets:
+    # Sadece localde dosyaya yazabiliriz
+    if os.path.exists(LOCAL_KEY_FILE):
         with open(LOCAL_KEY_FILE, "w") as f: f.write("\n".join(clean_keys))
     st.session_state['dynamic_key_pool'] = clean_keys
 
 # ==========================================
-# 🔥 FIREBASE INIT (HİBRİT: PC + CLOUD)
+# 🔥 FIREBASE INIT (HARDCODED - GARANTİ ÇÖZÜM)
 # ==========================================
 def init_firebase():
     if len(firebase_admin._apps) > 0: return
     try:
-        # 1. YÖNTEM: Yerel Dosya (PC'de çalışırken burası çalışır)
-        if os.path.exists(FIREBASE_JSON_FILE):
-            cred = credentials.Certificate(FIREBASE_JSON_FILE)
-            firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
-            
-        # 2. YÖNTEM: Streamlit Secrets (Cloud'a atarsan burası çalışır)
-        elif "firebase" in st.secrets and "text_key" in st.secrets["firebase"]:
-            cred_info = json.loads(st.secrets["firebase"]["text_key"])
-            cred = credentials.Certificate(cred_info)
-            firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
-            
-        else:
-            st.error("⚠️ Firebase anahtarı bulunamadı! (Ne dosya var ne de Secrets)")
-            st.stop()
+        # SENİN VERDİĞİN KEY BURAYA GÖMÜLDÜ 👇
+        key_dict = {
+          "type": "service_account",
+          "project_id": "geminiborsa-f9a80",
+          "private_key_id": "48b5d78f516302263727053dc5a870bd5f920ac4",
+          "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCow86o1O7cUyWI\nCUFF23sEG7fEMbUt+Owahc14TfLiucZAbe0MyWtrvYX64tAC8JEFwpnzMdz3Cxq+\n0N3Kv/k6DopGgUo6PIPwwRDOqrvRA37FKvo0iV+QgG/kx9rL5xelaeXZcxTDdjWw\nTO9FbDhsJThGFVnTpkqWYEtUx6j6IIRTtBRSMA85suusKJqUpIWlX3Rjb/xPVbgU\nPlQK6Kd00AYGNFgEqqsFr0JzjR1ttmwlkR6h1l3N34DjcDW4mjgR6qToBzrFQYx5\niuObh9nlODi8lGo2S9c9RJJyJJyNwfsJ+33JEIY0bWtv14Yd5jiwiWsHMYG0Tgjf\nU9HStrU3AgMBAAECggEACAz3Mc9JPxIUVe34bX2v251QNzgWfYVEthXbRw7o3u9K\ndCO0+DQvlKnWLLFfMj9e8QMR1wEc77Ku6Zq1yd3oj2AcMTV/tfwnCyLFS3vnjmv3\n7diZVkzrVc2wCMjj43A4YjgFXUnZHA3qjRN5IpBWt19Qf5S10/E4g6iU+gwK6oue\nAV9CuefdxjPmUWaXXG295NBt+YpYoQ+XD7P2KtRwSX1o+vMSSQg3BpMfvsUKYBAe\nE2XzfXMYGD+OXitlUDI1ydb2GO1dQoK/te0c51LEvm0TpmesiUdlFaag5OW8+arS\nbZ+jrxJqwkP0tWoYkYTSY7nrOWo+kkxsq1+xQ70SeQKBgQDgB+ccOOskDjcq2T84\ngdreAuHZADCvin4rlZrpL5snbwpyRE6sWkmMmqe3S2QIPA7JpMSf4x2k+oypCcsi\nQkQzInBqHNKbbupqmIcJlBfNrfQOqq9p0G8MjwBjqGwi9SaYqTWOjdXvB41dF6jy\niJeM0qK7QGSCcHI+Yi8Yx7r1AwKBgQDA2PnchGGF0VrK8/kt2zvip9dey5Hhd1Ve\nbIo1GkABu/2oQPqBNpuGgt+AvSd84RgbL8/xg9pcBYw4sCYBZilrpH3BgPrZ0D09\nEGnk90dRa40JKtDO3H4FXHyVkLRBMt4j3Py+uXXHrWBRRNGHd+7mj5EC+MRRg92f\nUxtV7TtGvQKBgH1PrlQ4+j4WvYD4N8axy+z3C8FHu/PUsbJLYnUgrdam4976mk8J\nya4eK8X5I6D/hv3/bgRJE6Hei6NZ2Qf2rRM1JlAUgzFyHyk03APdlFr1/Fff3XKA\npj0OGBemc6YyHj6yF0T/zTSAsu/pdhUDllGs2F2JLS9RGnYOkW14+vhlAoGAG7jV\nKkMJdeAjihtKTbI/SJTSG/ltjhjGd91ofLu6ScWJcD9vA1YjQ1Ha6TnHzGbbPUVB\nQjmvER1nC9sei4LxH101CrUM2nTZ6MZMQrLdWLH6Q0AZZjNCFmk2K5Xyo5C5aDRj\nTNOCP+MHfodDC5NND23B7chvCDzJhha/TjndFI0CgYEAspHPEXIs6pA6T4idbI4f\n9WISoqmvRlzs/Z8FWJbx5bqx2+xRgkgR5muCsXeFvF4Tna87iR1cLixbIpQuMqO4\nHOkJUafdWoU7fhAOghLffjfoBLvjSW487T9LiUPUwWq/CXhN/C/KZhw4IXmaTg18\nCxzdYHfdIjV7q7QP0hEhF9w=\n-----END PRIVATE KEY-----\n",
+          "client_email": "firebase-adminsdk-fbsvc@geminiborsa-f9a80.iam.gserviceaccount.com",
+          "client_id": "111579891187704340858",
+          "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+          "token_uri": "https://oauth2.googleapis.com/token",
+          "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+          "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-fbsvc%40geminiborsa-f9a80.iam.gserviceaccount.com",
+          "universe_domain": "googleapis.com"
+        }
+        
+        cred = credentials.Certificate(key_dict)
+        firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
+        
     except Exception as e:
         st.error(f"Firebase Bağlantı Hatası: {e}")
         st.stop()
@@ -151,13 +151,14 @@ def check_firebase_status():
             st.rerun()
 
 # ==========================================
-# 🧠 GEMINI ANALIZ
+# 🧠 GEMINI ANALIZ (HAFIZA ENTEGRASYONU)
 # ==========================================
 def analyze_images_stream(all_images, model_name):
     pool = st.session_state['dynamic_key_pool']
     if not pool: yield "API Key yok! Lütfen api_keys.txt dosyasına key ekleyin."; return
     key = pool[st.session_state['key_index'] % len(pool)]
     
+    # SENİN İSTEDİĞİN ÖZEL HAFIZA TALİMATLARI BURADA
     SYSTEM_INSTRUCTION = """
     Sen Kıdemli Borsa Stratejistisin.
     GÖREV: Görselleri analiz et.
@@ -210,7 +211,8 @@ def main():
         
         st.subheader("Gemini Keys")
         keys_val = "\n".join(st.session_state['dynamic_key_pool'])
-        # Sadece Localde ise düzenlemeye izin ver, Cloud'da secrets'tan gelir
+        
+        # Localde ise düzenleme kutusu göster
         if os.path.exists(LOCAL_KEY_FILE):
             new_keys = st.text_area("Düzenle:", keys_val, height=150)
             col_save, col_test = st.columns(2)
@@ -219,7 +221,8 @@ def main():
                 st.success("Kaydedildi!")
                 st.rerun()
         else:
-            st.info("Cloud Modu: Keyler Secrets'tan yönetiliyor.")
+            # Cloud'da ise sadece bilgi ve test butonu
+            st.info(f"Yüklü Key Sayısı: {len(st.session_state['dynamic_key_pool'])}")
             col_test = st.container()
 
         if col_test.button("🔑 Key Test"):
@@ -228,7 +231,7 @@ def main():
                 st.error("Key yok!")
             else:
                 test_console = st.container(border=True)
-                test_console.write("🔎 **API Key Kontrolü...**")
+                test_console.write("🔎 **API Key Kontrolü Başlıyor...**")
                 for k in pool:
                     mask_k = f"{k[:6]}...{k[-4:]}"
                     try:
@@ -276,7 +279,7 @@ def main():
             st.warning("⚠️ Mini-App Açıldı! SS yükleyin.")
             if st.button("İptal"): db.reference('bridge/request').update({'status': 'cancelled'}); st.rerun()
 
-        # --- X TARAYICI (GÜNCELLENDİ) ---
+        # --- X TARAYICI (SENİN İSTEDİĞİN GİBİ) ---
         st.divider()
         st.subheader("𝕏 Tarayıcı")
         x_sym = st.text_input("Kod:", value=sym if sym else "THYAO", key="x_in").upper()
