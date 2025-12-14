@@ -116,22 +116,36 @@ if not st.session_state['dynamic_key_pool']:
     load_keys_from_disk()
 
 # ==========================================
-# 🔥 FIREBASE
+# 🔥 FIREBASE (DÜZELTİLDİ: RefreshError Önleyici)
 # ==========================================
 def init_firebase():
     if len(firebase_admin._apps) > 0: return
     try:
+        # 1. Local Dosya Varsa
         if os.path.exists("firebase_key.json"):
             cred = credentials.Certificate("firebase_key.json")
-        else:
+        
+        # 2. Streamlit Secrets Varsa
+        elif "firebase" in st.secrets and "json_content" in st.secrets["firebase"]:
             json_str = st.secrets["firebase"]["json_content"]
-            cred = credentials.Certificate(json.loads(json_str))
+            cred_info = json.loads(json_str)
+            
+            # --- KRİTİK DÜZELTME: Satır sonu karakterlerini onar ---
+            if "private_key" in cred_info:
+                cred_info["private_key"] = cred_info["private_key"].replace("\\n", "\n")
+            
+            cred = credentials.Certificate(cred_info)
+        else:
+            st.error("⚠️ Firebase Anahtarı Bulunamadı! (Ne dosya var ne de Secrets)")
+            st.stop()
+
         firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
     except Exception as e:
         st.error(f"Firebase Bağlantı Hatası: {e}")
+        st.stop()
 
 # ==========================================
-# 📡 TELEGRAM İŞLEMLERİ (DÜZELTİLDİ)
+# 📡 TELEGRAM İŞLEMLERİ
 # ==========================================
 def start_telegram_request(symbol, rtype):
     if not firebase_admin._apps: return
@@ -164,13 +178,7 @@ def start_telegram_request(symbol, rtype):
     st.rerun()
 
 def send_user_selection(selection):
-    """
-    KULLANICI SEÇİMİNİ GÖNDERİR.
-    DÜZELTME: Timestamp eklendi, böylece bot bunun yeni bir komut olduğunu anlar.
-    """
     ref_req = db.reference('bridge/request')
-    
-    # Timestamp güncellemesi kritik!
     ref_req.update({
         'status': 'selection_made', 
         'selection': selection,
@@ -181,8 +189,20 @@ def send_user_selection(selection):
     st.session_state['telegram_flow']['options'] = []
     
     st.toast(f"Seçim İletildi: {selection}", icon="📨")
-    time.sleep(0.5) # Firebase yazma işlemi için kısa bekleme
+    time.sleep(0.5) 
     st.rerun()
+
+# ==========================================
+# 🔁 BRIDGE RESTART KOMUTU
+# ==========================================
+def send_restart_command():
+    if not firebase_admin._apps: return
+    ref_cmd = db.reference('bridge/system_command')
+    ref_cmd.set({
+        'command': 'restart',
+        'timestamp': time.time()
+    })
+    st.toast("🔄 Yeniden Başlatma Komutu Gönderildi!", icon="🔄")
 
 def check_firebase_status():
     try:
@@ -226,7 +246,7 @@ def check_firebase_status():
     except Exception: pass
 
 # ==========================================
-# 🤖 GEMINI ANALİZ (STREAM MODU)
+# 🤖 GEMINI ANALİZ
 # ==========================================
 def get_current_key():
     pool = st.session_state['dynamic_key_pool']
@@ -353,6 +373,10 @@ def main():
     with st.sidebar:
         st.header("⚙️ Ayarlar")
         
+        # --- İSTEDİĞİN BUTON BURADA ---
+        if st.button("🔄 TELEGRAM İLETİŞİM BAĞLANTISINI YENİDEN BAŞLAT"):
+            send_restart_command()
+        
         if st.button("⚠️ SİSTEMİ SIFIRLA (RESET)", type="primary"):
             st.session_state.clear()
             st.rerun()
@@ -455,56 +479,38 @@ def main():
                 st.rerun()
 
         # ==========================================
-        # 🆕 EKLENEN KISIM: X TARAYICI
+        # 🆕 X TARAYICI (GÖRSELE BİREBİR UYGUN)
         # ==========================================
         st.divider()
-        with st.container(border=True):
-            st.header("𝕏 Tarayıcı")
+        st.subheader("𝕏 Tarayıcı")
+        
+        # 1. KOD GİRİŞİ (Görseldeki gibi)
+        x_symbol = st.text_input("Kod:", value=symbol if symbol else "THYAO", key="x_input_real").upper()
+        
+        # 2. TİP SEÇİMİ (Radio Button - Görseldeki gibi)
+        search_type = st.radio("Tip:", ["🔥 Geçmiş", "⏱️ Canlı"], key="x_search_type")
+        
+        # 3. TARİH SEÇİMİ (Sadece Geçmiş seçiliyken anlamlı ama görselde var)
+        x_date = st.date_input("Tarih", datetime.date.today(), key="x_date_picker")
+        
+        # 4. LİNK OLUŞTURMA MANTIĞI
+        final_url = ""
+        btn_label = ""
+        
+        if search_type == "🔥 Geçmiş":
+            # Geçmiş araması: O tarihten bir sonraki güne kadar olan tweetler
+            next_day = x_date + datetime.timedelta(days=1)
+            query = f"#{x_symbol} lang:tr until:{next_day} since:{x_date} min_faves:5"
+            final_url = f"https://x.com/search?q={quote(query)}&src=typed_query&f=top"
+            btn_label = f"🔥 {x_date} Popüler"
+        else:
+            # Canlı arama
+            query = f"#{x_symbol} lang:tr"
+            final_url = f"https://x.com/search?q={quote(query)}&src=typed_query&f=live"
+            btn_label = f"⏱️ {x_symbol} Son Dakika"
             
-            # Kod değişkeni yoksa default "THYAO" ata
-            api_ticker_input = symbol if symbol else "THYAO"
-
-            raw_ticker = st.text_input("Kod:", api_ticker_input, key="x_ticker_input").upper()
-            clean_ticker = raw_ticker.replace("#", "").strip()
-            search_mode = st.radio("Tip:", ("🔥 Geçmiş", "⏱️ Canlı"), key="x_search_mode")
-            
-            if search_mode == "🔥 Geçmiş":
-                s_date = st.date_input("Tarih", datetime.date.today(), key="x_date_input")
-                # X Arama Linki (Geçmiş)
-                url = f"https://x.com/search?q={quote(f'#{clean_ticker} lang:tr until:{s_date + datetime.timedelta(days=1)} since:{s_date} min_faves:5')}&src=typed_query&f=top"
-                btn_txt = f"🔥 <b>{s_date}</b> Popüler"
-            else:
-                # X Arama Linki (Canlı)
-                url = f"https://x.com/search?q={quote(f'#{clean_ticker} lang:tr')}&src=typed_query&f=live"
-                btn_txt = f"⏱️ Son Dakika"
-            
-            # CSS ile Buton Görünümü Kazandırma
-            st.markdown(
-                f"""
-                <style>
-                .x-btn {{
-                    display: inline-block;
-                    padding: 0.5em 1em;
-                    color: white;
-                    background-color: #000000; /* X Black */
-                    border: 1px solid #333;
-                    border-radius: 8px;
-                    text-decoration: none;
-                    font-weight: bold;
-                    text-align: center;
-                    width: 100%;
-                    margin-top: 10px;
-                }}
-                .x-btn:hover {{
-                    background-color: #333;
-                    color: white;
-                    border-color: #555;
-                }}
-                </style>
-                <a href="{url}" target="_blank" class="x-btn">{btn_txt}</a>
-                """, 
-                unsafe_allow_html=True
-            )
+        # 5. BUTON (Görseldeki link yapısına uygun)
+        st.link_button(btn_label, url=final_url, use_container_width=True)
         # ==========================================
 
     with col2:
