@@ -33,9 +33,10 @@ MODEL_LITE  = 'gemini-2.5-flash-lite'
 LOCAL_KEY_FILE = "api_keys.txt"
 
 # BOT YAPILANDIRMASI
+# DÜZENLEME: Username yerine artık ID'ler (Integer) kullanılıyor.
 BOT_CONFIGS = {
     "xFinans": {
-        "username": "@xFinans_bot",
+        "username": 7704383636, # @xFinans_bot ID
         "buttons": [
             ("📊 Derinlik", "derinlik"),
             ("🔢 Teorik", "teorik"),
@@ -46,7 +47,7 @@ BOT_CONFIGS = {
         ]
     },
     "BorsaBilgi": {
-        "username": "@borsabilgibot",
+        "username": 7337864804, # @borsabilgibot ID
         "buttons": [
             ("📊 Derinlik", "derinlik"),
             ("🏢 AKD", "akd"),
@@ -59,7 +60,7 @@ BOT_CONFIGS = {
         ]
     },
     "BorsaBuzz": {
-        "username": "@BorsaBuzzBot",
+        "username": 7697855307, # @BorsaBuzzBot ID
         "buttons": [
             ("📊 Derinlik", "derinlik"),
             ("🏢 AKD", "akd"),
@@ -71,7 +72,7 @@ BOT_CONFIGS = {
         ]
     },
     "b0pt": {
-        "username": "@b0pt_bot",
+        "username": 7991185550, # @b0pt_bot ID
         "buttons": [
             ("📊 Derinlik", "derinlik"),
             ("🏢 AKD", "akd"),
@@ -281,6 +282,7 @@ def analyze_images_stream(all_images, model_name):
     ## 2. 📊 DERİNLİK ANALİZİ (Varsa)
     * **Alıcı/Satıcı Dengesi:** (:green[Alıcılar] mı :red[Satıcılar] mı güçlü?)
     * **Emir Yığılmaları:** (Hangi kademede ne kadar lot var?)
+    * **KADEME YORUMU:** :blue[Buraya kademe yorumunu yap.]
 
     ## 3. 🏢 KURUM VE PARA GİRİŞİ (AKD) (Varsa)
     * **Toplayanlar:** (Kim alıyor? Maliyetleri ne?)
@@ -403,7 +405,7 @@ def main():
             st.session_state['selected_bot_key'] = selected_bot_name
             st.rerun()
             
-        st.caption(f"Aktif: {BOT_CONFIGS[selected_bot_name]['username']}")
+        st.caption(f"Aktif ID: {BOT_CONFIGS[selected_bot_name]['username']}")
         st.divider()
 
         st.subheader("🔑 API Anahtarları")
@@ -458,10 +460,11 @@ def main():
                 start_telegram_request(symbol, btn_cmd)
 
         step = st.session_state['telegram_flow']['step']
+        # GÖRSEL DÜZELTME: ID'yi ekranda göstermesi sorun değil
         target_username = BOT_CONFIGS[selected_bot_name]["username"]
 
         if step == 'processing':
-            st.info(f"⏳ {target_username} bekleniyor...")
+            st.info(f"⏳ {target_username} (ID) bekleniyor...")
             st.spinner("İşleniyor...")
             time.sleep(1)
             st.rerun()
