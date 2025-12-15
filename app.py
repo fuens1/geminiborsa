@@ -464,7 +464,7 @@ def main():
         target_username = BOT_CONFIGS[selected_bot_name]["username"]
 
         if step == 'processing':
-            st.info(f"⏳ {target_username} (ID) bekleniyor...")
+            st.info(f"⏳ Veri Çekiliyor...")
             st.spinner("İşleniyor...")
             time.sleep(1)
             st.rerun()
