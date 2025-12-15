@@ -267,7 +267,7 @@ def analyze_images_stream(all_images, model_name):
     GÖREVİN:
     Ekteki görsellerdeki verileri (Derinlik, AKD, Takas, Mini-App Listeleri, Grafikler) oku ve YARIDA KESMEDEN detaylıca raporla.
     Görselde veri yoksa, o başlığın altına "Veri bulunamadı" yaz.
-
+    
     🎨 RENK KODLARI:
     * :green[...] -> Yükseliş, Güçlü Alım, Destek Üstü, Pozitif.
     * :red[...] -> Düşüş, Satış Baskısı, Direnç Altı, Negatif.
@@ -338,6 +338,9 @@ def analyze_images_stream(all_images, model_name):
     
     ## 19. 🚦 "Dominant Taraf ve Delta Analizi
     *Şu an tahtada gerçekleşen işlemlere bak (Time & Sales). İşlemler daha çok 'Satış Kademesinden' (Aktif Alış) mi geçiyor, yoksa 'Alış Kademesinden' (Aktif Satış) mi? Yani piyasa emri gönderenler ALICILAR mi SATICILAR mi? Delta (Net Alıcı - Net Satıcı) pozitif mi negatif mi? Kim daha agresif?
+
+    [KURAL]
+    *Analiz yaparken, başlıkların yanında, başlığın içeriği genel anlamda Olumlu - Nötr - Olumsuz olduklarını belirt. (Örn: KAPANIŞ BEKLENTİSİ [OLUMLU]) ve tabiki de OLUMLU: YEŞİL, OLUMSUZ: KIRMIZI, NÖTR: MAVİ renk olacak.
     """ 
 
     try:
