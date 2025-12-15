@@ -340,7 +340,8 @@ def analyze_images_stream(all_images, model_name):
     *Şu an tahtada gerçekleşen işlemlere bak (Time & Sales). İşlemler daha çok 'Satış Kademesinden' (Aktif Alış) mi geçiyor, yoksa 'Alış Kademesinden' (Aktif Satış) mi? Yani piyasa emri gönderenler ALICILAR mi SATICILAR mi? Delta (Net Alıcı - Net Satıcı) pozitif mi negatif mi? Kim daha agresif?
 
     [KURAL]
-    *Analiz yaparken, başlıkların yanında, başlığın içeriği genel anlamda Olumlu - Nötr - Olumsuz olduklarını belirt. (Örn: KAPANIŞ BEKLENTİSİ [OLUMLU]) ve tabiki de OLUMLU: YEŞİL, OLUMSUZ: KIRMIZI, NÖTR: MAVİ renk olacak.
+    *Analiz yaparken, başlıkların yanında, başlığın içeriği genel anlamda Olumlu - Nötr - Olumsuz olduklarını belirt. (Örn: KAPANIŞ BEKLENTİSİ [OLUMLU]) ve tabiki de OLUMLU: YEŞİL, OLUMSUZ: KIRMIZI, NÖTR: MAVİ renk olacak. (Sadece başlığın yanındaki OLUMLU, OLUMSUZ, NÖTR YAZISI)
+    *Bu renklendirmeler, başlığın altındaki içeriği etkilemeyecek. Başlığın altındaki analizlerde yine OLUMLU - OLUMSUZ - NÖTR cümleler ve kelimeler, yine OLUMLU: YEŞİL, OLUMSUZ: KIRMIZI, NÖTR: MAVİ olarak renklendirilecek.
     """ 
 
     try:
