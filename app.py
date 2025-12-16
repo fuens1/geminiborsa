@@ -341,6 +341,14 @@ def analyze_images_stream(all_images, model_name):
     ## 19. 🚦 "Dominant Taraf ve Delta Analizi
     *Şu an tahtada gerçekleşen işlemlere bak (Time & Sales). İşlemler daha çok 'Satış Kademesinden' (Aktif Alış) mi geçiyor, yoksa 'Alış Kademesinden' (Aktif Satış) mi? Yani piyasa emri gönderenler ALICILAR mi SATICILAR mi? Delta (Net Alıcı - Net Satıcı) pozitif mi negatif mi? Kim daha agresif?
 
+    ## 20. 🗣️ SOHBET VE ANALİZ ÖZETİ (FİNAL)
+    *Buraya kadar yaptığın tüm teknik ve takas analizlerini harmanla (1-19. maddeler). Sanki karşında bir arkadaşın varmış gibi samimi bir dille durumu özetle.
+    *Bu hisse için nihai karar nedir? "Bu mal alınır" mı dersin yoksa "Uzak dur" mu?
+    *Kullandığın sıfatlarda duygu durumunu mutlaka renklendir:
+    * :green[GÜÇLÜ], :green[POZİTİF], :green[ALIM FIRSATI], :green[RALLİ], :green[GÜVENLİ], :green[FIRSAT] gibi olumlu kelimeleri YEŞİL yap.
+    * :red[ZAYIF], :red[NEGATİF], :red[SATIŞ BASKISI], :red[TUZAK], :red[TEHLİKELİ], :red[UÇURUM] gibi olumsuz kelimeleri KIRMIZI yap.
+    *Analizin en sonunda, tüm bu verileri tek bir cümlelik slogana dök.
+
     [KURAL]
     *Analiz yaparken, başlıkların yanında, başlığın içeriği genel anlamda Olumlu - Nötr - Olumsuz olduklarını belirt. (Örn: KAPANIŞ BEKLENTİSİ [OLUMLU]) ve tabiki de OLUMLU: YEŞİL, OLUMSUZ: KIRMIZI, NÖTR: MAVİ renk olacak. (Sadece başlığın yanındaki OLUMLU, OLUMSUZ, NÖTR YAZISI)
     *Bu renklendirmeler, başlığın altındaki içeriği etkilemeyecek. Başlığın altındaki analizlerde yine OLUMLU - OLUMSUZ - NÖTR cümleler ve kelimeler, yine OLUMLU: YEŞİL, OLUMSUZ: KIRMIZI, NÖTR: MAVİ olarak renklendirilecek.
