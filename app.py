@@ -310,7 +310,10 @@ def analyze_images_stream(all_images, model_name):
     ## 18. 🚦 Dominant Taraf ve Delta Analizi
     *Delta pozitif mi negatif mi?
 
-    ## 19. 🗣️ SOHBET VE ANALİZ ÖZETİ (FİNAL)
+    ## 19. ↕ Destek - Direnç Analizi
+    *Derinlik - Kademe - AKD verilerinden yararlanarak en doğru ve en potansiyelli destek ve direnç fiyatlarını göster. Destek ve direncin gücüne göre sırala.
+
+    ## 20. 🗣️ SOHBET VE ANALİZ ÖZETİ (FİNAL)
     *Özet karar: :green[ALIM FIRSATI] mı :red[UZAK DUR] mu?
     *Slogan cümle.
     """ 
