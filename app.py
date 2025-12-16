@@ -247,7 +247,7 @@ def check_firebase_status():
     except Exception: pass
 
 # ==========================================
-# 🤖 GEMINI ANALİZ
+# 🤖 GEMINI ANALİZ (DÜZELTİLMİŞ RETRY VERSİYONU)
 # ==========================================
 def get_current_key():
     pool = st.session_state['dynamic_key_pool']
@@ -255,6 +255,10 @@ def get_current_key():
     return pool[st.session_state['key_index'] % len(pool)]
 
 def analyze_images_stream(all_images, model_name):
+    # En fazla 3 kere yeniden denesin
+    max_retries = 3
+    
+    # Mevcut Key
     key = get_current_key()
     if not key:
         yield "HATA: API Key bulunamadı!"
@@ -354,26 +358,42 @@ def analyze_images_stream(all_images, model_name):
     *Bu renklendirmeler, başlığın altındaki içeriği etkilemeyecek. Başlığın altındaki analizlerde yine OLUMLU - OLUMSUZ - NÖTR cümleler ve kelimeler, yine OLUMLU: YEŞİL, OLUMSUZ: KIRMIZI, NÖTR: MAVİ olarak renklendirilecek.
     """ 
 
-    try:
-        client = genai.Client(api_key=key)
-        config = types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTION,
-            temperature=0.2, 
-            max_output_tokens=99999 
-        )
-        
-        response_stream = client.models.generate_content_stream(
-            model=model_name, 
-            contents=gemini_contents, 
-            config=config
-        )
-        
-        for chunk in response_stream:
-            if chunk.text:
-                yield chunk.text
+    # --- RETRY MEKANİZMASI ---
+    for attempt in range(max_retries):
+        try:
+            client = genai.Client(api_key=key)
+            config = types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                temperature=0.2, 
+                max_output_tokens=99999 
+            )
+            
+            response_stream = client.models.generate_content_stream(
+                model=model_name, 
+                contents=gemini_contents, 
+                config=config
+            )
+            
+            for chunk in response_stream:
+                if chunk.text:
+                    yield chunk.text
+            
+            # Başarılı olursa döngüden çık
+            break
 
-    except Exception as e:
-        yield f"HATA: {str(e)}"
+        except Exception as e:
+            error_msg = str(e)
+            # Eğer hata 503 veya 429 (Too Many Requests) ise
+            if "503" in error_msg or "429" in error_msg or "overloaded" in error_msg.lower():
+                if attempt < max_retries - 1:
+                    yield f"⚠️ Sunucu yoğun ({model_name}), yeniden deneniyor... ({attempt+1}/{max_retries})\n\n"
+                    time.sleep(2) # 2 saniye bekle ve tekrar dene
+                    continue
+                else:
+                    yield f"❌ HATA: Google Sunucuları çok yoğun, lütfen 1-2 dakika sonra tekrar deneyin veya modeli değiştirin. Hata: {error_msg}"
+            else:
+                yield f"HATA: {error_msg}"
+                break
 
 # ==========================================
 # 🖥️ ARAYÜZ (MAIN)
