@@ -365,8 +365,7 @@ def parse_markdown_sections(text):
         header_line = lines[0].strip()
         
         # --- FİLTRELEME MANTIĞI ---
-        # Eğer başlık bir rakamla ve noktayla başlamıyorsa (Örn: "1.", "10.")
-        # bu bir analiz başlığı değildir (muhtemelen giriş cümlesidir), atla.
+        # Sadece rakamla başlayan (Örn: "1.", "10.") başlıkları al
         if not re.match(r'^\d+\.', header_line):
             continue
             
@@ -563,14 +562,43 @@ def main():
                 
                 sections = parse_markdown_sections(st.session_state['analysis_result'])
                 
+                # --- SAYIMLARI YAP ---
+                count_pos = sum(1 for s in sections if s['color'] == 'green')
+                count_neg = sum(1 for s in sections if s['color'] == 'red')
+                count_neu = sum(1 for s in sections if s['color'] == 'blue')
+
                 with st.expander("📂 Analiz Başlıklarını Filtrele", expanded=True):
-                    # --- BUTONLARI DÜZELTTİK: Direkt Session State'e yazıyor ---
+                    
+                    # --- KATEGORİ BUTONLARI ---
+                    c1, c2, c3 = st.columns(3)
+                    
+                    # OLUMLU (YEŞİL)
+                    if c1.button(f"✅ OLUMLU ({count_pos})", use_container_width=True):
+                        for s in sections:
+                            st.session_state[f"chk_{s['id']}"] = (s['color'] == 'green')
+                        st.rerun()
+
+                    # OLUMSUZ (KIRMIZI)
+                    if c2.button(f"🔻 OLUMSUZ ({count_neg})", use_container_width=True):
+                        for s in sections:
+                            st.session_state[f"chk_{s['id']}"] = (s['color'] == 'red')
+                        st.rerun()
+
+                    # NÖTR (MAVİ)
+                    if c3.button(f"🔹 NÖTR ({count_neu})", use_container_width=True):
+                        for s in sections:
+                            st.session_state[f"chk_{s['id']}"] = (s['color'] == 'blue')
+                        st.rerun()
+                    
+                    st.divider()
+
+                    # --- TOPLU İŞLEM BUTONLARI ---
                     col_act1, col_act2 = st.columns(2)
-                    if col_act1.button("Tümünü Seç"):
+                    if col_act1.button("Tümünü Seç", key="sel_all", use_container_width=True):
                         for s in sections:
                             st.session_state[f"chk_{s['id']}"] = True
                         st.rerun()
-                    if col_act2.button("Tümünü Kaldır"):
+                    if col_act2.button("Tümünü Kaldır", key="desel_all", use_container_width=True):
                         for s in sections:
                             st.session_state[f"chk_{s['id']}"] = False
                         st.rerun()
@@ -579,14 +607,13 @@ def main():
                     
                     f_cols = st.columns(2)
                     for i, s in enumerate(sections):
-                        # Key tabanlı state yönetimi (Varsayılan True)
+                        # Key tabanlı state yönetimi
                         chk_key = f"chk_{s['id']}"
                         if chk_key not in st.session_state:
                             st.session_state[chk_key] = True
                             
                         display_text = f":{s['color']}[{s['header']}]"
                         
-                        # Artık value=... yerine key=... ile state'i otomatik yönetiyor
                         f_cols[i % 2].checkbox(display_text, key=chk_key)
 
                 st.markdown("---")
