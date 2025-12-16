@@ -4,6 +4,7 @@ import os
 import time
 import base64
 import datetime
+import re
 from urllib.parse import quote
 from io import BytesIO
 from PIL import Image
@@ -97,9 +98,7 @@ if 'telegram_images' not in st.session_state: st.session_state['telegram_images'
 if 'key_index' not in st.session_state: st.session_state['key_index'] = 0
 if 'dynamic_key_pool' not in st.session_state: st.session_state['dynamic_key_pool'] = []
 if 'selected_bot_key' not in st.session_state: st.session_state['selected_bot_key'] = "xFinans"
-# --- YENİ EKLENEN SESSION DEĞİŞKENLERİ ---
 if 'analysis_result' not in st.session_state: st.session_state['analysis_result'] = None 
-if 'filter_state' not in st.session_state: st.session_state['filter_state'] = {} 
 
 # --- KALICI HAFIZA ---
 def load_keys_from_disk():
@@ -154,8 +153,7 @@ def start_telegram_request(symbol, rtype):
         return
 
     st.session_state['telegram_flow'] = {'step': 'processing', 'symbol': symbol, 'options': []}
-    st.session_state['analysis_result'] = None # Yeni işlemde eski analizi temizle
-    st.session_state['filter_state'] = {}      # Filtreleri temizle
+    st.session_state['analysis_result'] = None 
     
     ref_req = db.reference('bridge/request')
     db.reference('bridge/response').delete() 
@@ -312,9 +310,8 @@ def analyze_images_stream(all_images, model_name):
     *Slogan cümle.
 
     [KURAL]
-    *Analiz yaparken, başlıkların HEMEN YANINA, o bölümün genel duygu durumunu belirten etiketi ekle.
+    *Analiz yaparken, başlıkların hemen yanına, genel duygu durumunu belirten metni ekle.
     *Örnek: "## 6. 🔮 KAPANIŞ BEKLENTİSİ [OLUMLU]" veya "## 15. 🛑 Şeytanın Avukatı (Risk Analizi) [OLUMSUZ]" veya "[NÖTR]"
-    *Eğer net bir duygu yoksa [NÖTR] yaz.
     *Bu etiketleri kullanarak filtreleme yapacağız, o yüzden başlık satırında bu [ETİKET]'i eksik etme.
     """ 
 
@@ -351,25 +348,32 @@ def analyze_images_stream(all_images, model_name):
 def parse_markdown_sections(text):
     """
     Markdown metnini '## ' başlıklarına göre böler.
-    Başlık içindeki [OLUMLU] vb. etiketlere göre renk atar.
+    1. GEREKSİZ GİRİŞ CÜMLESİNİ ATAR: Sadece rakamla (1. 2. 3.) başlayan başlıkları alır.
+    2. Renk/Duygu analizi yapar.
     """
     if not text: return []
     
-    # "## " ile başlayan kısımları böl
     raw_sections = text.split("## ")
     parsed_sections = []
+    
+    counter = 0 # ID'leri sırayla vermek için
     
     for i, section in enumerate(raw_sections):
         if not section.strip(): continue
         
-        # Başlık satırını bul
         lines = section.split('\n')
         header_line = lines[0].strip()
-        body = "## " + section # Markdown formatını korumak için ## geri ekle
         
-        # Renk/Duygu Analizi (Header içindeki kelimelere göre)
-        label_color = "blue" # Varsayılan Nötr
+        # --- FİLTRELEME MANTIĞI ---
+        # Eğer başlık bir rakamla ve noktayla başlamıyorsa (Örn: "1.", "10.")
+        # bu bir analiz başlığı değildir (muhtemelen giriş cümlesidir), atla.
+        if not re.match(r'^\d+\.', header_line):
+            continue
+            
+        body = "## " + section
         
+        # Renk/Duygu Analizi
+        label_color = "blue"
         upper_header = header_line.upper()
         if any(x in upper_header for x in ["OLUMLU", "POZİTİF", "YEŞİL", "GÜÇLÜ", "ALIM", "FIRSAT"]):
             label_color = "green"
@@ -377,11 +381,12 @@ def parse_markdown_sections(text):
             label_color = "red"
         
         parsed_sections.append({
-            "id": i,
+            "id": counter,
             "header": header_line,
             "body": body,
             "color": label_color
         })
+        counter += 1
         
     return parsed_sections
 
@@ -519,8 +524,7 @@ def main():
                 cols[i%3].image(img, use_container_width=True)
             if st.button("TEMİZLE", type="secondary"):
                 st.session_state['telegram_images'] = []
-                st.session_state['analysis_result'] = None # Temizlerken sonucu da sil
-                st.session_state['filter_state'] = {}
+                st.session_state['analysis_result'] = None 
                 st.rerun()
 
             st.divider()
@@ -548,60 +552,49 @@ def main():
                 progress_bar.progress(1.0)
                 status_text.caption("Analiz Tamamlandı! %100")
                 
-                # --- KRİTİK: Sonucu Hafızaya At ve Sayfayı Yenile ---
+                # Sonucu Hafızaya At ve Sayfayı Yenile
                 st.session_state['analysis_result'] = full_text
-                st.rerun() # Sayfa yenilendiğinde alttaki IF bloğu çalışacak ve filtreleri gösterecek
+                st.rerun() 
 
-            # --- FİLTRELİ SONUÇ GÖSTERİMİ (Analiz Bittikten Sonra Çalışır) ---
+            # --- FİLTRELİ SONUÇ GÖSTERİMİ ---
             if st.session_state['analysis_result']:
                 st.divider()
                 st.subheader("🔍 Sonuç Filtresi")
                 
-                # Metni parçalara ayır
                 sections = parse_markdown_sections(st.session_state['analysis_result'])
                 
-                # Filtre Kutusu (Expander)
                 with st.expander("📂 Analiz Başlıklarını Filtrele", expanded=True):
-                    
-                    # Toplu İşlem Butonları
+                    # --- BUTONLARI DÜZELTTİK: Direkt Session State'e yazıyor ---
                     col_act1, col_act2 = st.columns(2)
-                    if col_act1.button("Tümünü Seç", key="sel_all"):
-                        for s in sections: st.session_state['filter_state'][s['id']] = True
+                    if col_act1.button("Tümünü Seç"):
+                        for s in sections:
+                            st.session_state[f"chk_{s['id']}"] = True
                         st.rerun()
-                    if col_act2.button("Tümünü Kaldır", key="desel_all"):
-                        for s in sections: st.session_state['filter_state'][s['id']] = False
+                    if col_act2.button("Tümünü Kaldır"):
+                        for s in sections:
+                            st.session_state[f"chk_{s['id']}"] = False
                         st.rerun()
                     
                     st.divider()
                     
-                    # Checkboxları oluştur (Renkli Başlıklar ile)
-                    # 2 Sütun halinde gösterelim
                     f_cols = st.columns(2)
                     for i, s in enumerate(sections):
-                        # Varsayılan olarak seçili gelsin (ilk oluşumda)
-                        if s['id'] not in st.session_state['filter_state']:
-                            st.session_state['filter_state'][s['id']] = True
+                        # Key tabanlı state yönetimi (Varsayılan True)
+                        chk_key = f"chk_{s['id']}"
+                        if chk_key not in st.session_state:
+                            st.session_state[chk_key] = True
                             
-                        # Renkli Label Oluşturma (Streamlit Markdown desteği ile)
                         display_text = f":{s['color']}[{s['header']}]"
                         
-                        f_cols[i % 2].checkbox(
-                            display_text, 
-                            key=f"chk_{s['id']}", 
-                            value=st.session_state['filter_state'][s['id']],
-                            on_change=lambda id=s['id']: st.session_state['filter_state'].update({id: not st.session_state['filter_state'][id]})
-                        )
+                        # Artık value=... yerine key=... ile state'i otomatik yönetiyor
+                        f_cols[i % 2].checkbox(display_text, key=chk_key)
 
-                # --- SADECE SEÇİLİ BÖLÜMLERİ YAZDIR ---
                 st.markdown("---")
-                # Orijinal metni gizle, sadece filtrelenmişleri göster
+                # Filtrelenmiş içeriği göster
                 for s in sections:
-                    # Session state'deki checkbox durumuna göre göster
-                    is_checked = st.session_state.get(f"chk_{s['id']}", True)
-                    
-                    if is_checked:
+                    if st.session_state.get(f"chk_{s['id']}", True):
                         st.markdown(s['body'])
-                        st.markdown("") # Boşluk
+                        st.markdown("") 
                 
                 st.success("Analiz Gösterildi.")
 
