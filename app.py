@@ -4,6 +4,7 @@ import os
 import time
 import base64
 import datetime
+import re  # Regex için eklendi
 from urllib.parse import quote
 from io import BytesIO
 from PIL import Image
@@ -33,10 +34,9 @@ MODEL_LITE  = 'gemini-2.5-flash-lite'
 LOCAL_KEY_FILE = "api_keys.txt"
 
 # BOT YAPILANDIRMASI
-# DÜZENLEME: Username yerine artık ID'ler (Integer) kullanılıyor.
 BOT_CONFIGS = {
     "xFinans": {
-        "username": 7704383636, # @xFinans_bot ID
+        "username": 7704383636,
         "buttons": [
             ("📊 Derinlik", "derinlik"),
             ("🔢 Teorik", "teorik"),
@@ -47,7 +47,7 @@ BOT_CONFIGS = {
         ]
     },
     "BorsaBilgi": {
-        "username": 7337864804, # @borsabilgibot ID
+        "username": 7337864804,
         "buttons": [
             ("📊 Derinlik", "derinlik"),
             ("🏢 AKD", "akd"),
@@ -60,7 +60,7 @@ BOT_CONFIGS = {
         ]
     },
     "BorsaBuzz": {
-        "username": 7697855307, # @BorsaBuzzBot ID
+        "username": 7697855307,
         "buttons": [
             ("📊 Derinlik", "derinlik"),
             ("🏢 AKD", "akd"),
@@ -72,7 +72,7 @@ BOT_CONFIGS = {
         ]
     },
     "b0pt": {
-        "username": 7991185550, # @b0pt_bot ID
+        "username": 7991185550,
         "buttons": [
             ("📊 Derinlik", "derinlik"),
             ("🏢 AKD", "akd"),
@@ -98,6 +98,8 @@ if 'telegram_images' not in st.session_state: st.session_state['telegram_images'
 if 'key_index' not in st.session_state: st.session_state['key_index'] = 0
 if 'dynamic_key_pool' not in st.session_state: st.session_state['dynamic_key_pool'] = []
 if 'selected_bot_key' not in st.session_state: st.session_state['selected_bot_key'] = "xFinans"
+if 'analysis_result' not in st.session_state: st.session_state['analysis_result'] = None # Analiz Sonucu Hafızası
+if 'filter_state' not in st.session_state: st.session_state['filter_state'] = {} # Filtre Durumu
 
 # --- KALICI HAFIZA ---
 def load_keys_from_disk():
@@ -117,29 +119,22 @@ if not st.session_state['dynamic_key_pool']:
     load_keys_from_disk()
 
 # ==========================================
-# 🔥 FIREBASE (DÜZELTİLDİ: RefreshError Önleyici)
+# 🔥 FIREBASE
 # ==========================================
 def init_firebase():
     if len(firebase_admin._apps) > 0: return
     try:
-        # 1. Local Dosya Varsa
         if os.path.exists("firebase_key.json"):
             cred = credentials.Certificate("firebase_key.json")
-        
-        # 2. Streamlit Secrets Varsa
         elif "firebase" in st.secrets and "json_content" in st.secrets["firebase"]:
             json_str = st.secrets["firebase"]["json_content"]
             cred_info = json.loads(json_str)
-            
-            # --- KRİTİK DÜZELTME: Satır sonu karakterlerini onar ---
             if "private_key" in cred_info:
                 cred_info["private_key"] = cred_info["private_key"].replace("\\n", "\n")
-            
             cred = credentials.Certificate(cred_info)
         else:
-            st.error("⚠️ Firebase Anahtarı Bulunamadı! (Ne dosya var ne de Secrets)")
+            st.error("⚠️ Firebase Anahtarı Bulunamadı!")
             st.stop()
-
         firebase_admin.initialize_app(cred, {'databaseURL': FIREBASE_DB_URL})
     except Exception as e:
         st.error(f"Firebase Bağlantı Hatası: {e}")
@@ -150,21 +145,16 @@ def init_firebase():
 # ==========================================
 def start_telegram_request(symbol, rtype):
     if not firebase_admin._apps: return
-    
     bot_key = st.session_state['selected_bot_key']
     target_bot_username = BOT_CONFIGS[bot_key]["username"]
-
-    no_symbol_needed = [
-        "yukselendusen", "teorikliste", "sinyal", "endeks", "haber", 
-        "balina", "tum", "genelakd", "piyasayd", "teorikyd", 
-        "kurum", "kurumlar", "bofa"
-    ]
+    no_symbol_needed = ["yukselendusen", "teorikliste", "sinyal", "endeks", "haber", "balina", "tum", "genelakd", "piyasayd", "teorikyd", "kurum", "kurumlar", "bofa"]
     
     if rtype not in no_symbol_needed and not symbol:
         st.toast(f"⚠️ Bu işlem için hisse kodu gerekli!", icon="⚠️")
         return
 
     st.session_state['telegram_flow'] = {'step': 'processing', 'symbol': symbol, 'options': []}
+    st.session_state['analysis_result'] = None # Yeni işlemde eski analizi sil
     
     ref_req = db.reference('bridge/request')
     db.reference('bridge/response').delete() 
@@ -180,29 +170,16 @@ def start_telegram_request(symbol, rtype):
 
 def send_user_selection(selection):
     ref_req = db.reference('bridge/request')
-    ref_req.update({
-        'status': 'selection_made', 
-        'selection': selection,
-        'timestamp': time.time() 
-    })
-    
+    ref_req.update({'status': 'selection_made', 'selection': selection, 'timestamp': time.time()})
     st.session_state['telegram_flow']['step'] = 'processing'
     st.session_state['telegram_flow']['options'] = []
-    
     st.toast(f"Seçim İletildi: {selection}", icon="📨")
     time.sleep(0.5) 
     st.rerun()
 
-# ==========================================
-# 🔁 BRIDGE RESTART KOMUTU
-# ==========================================
 def send_restart_command():
     if not firebase_admin._apps: return
-    ref_cmd = db.reference('bridge/system_command')
-    ref_cmd.set({
-        'command': 'restart',
-        'timestamp': time.time()
-    })
+    db.reference('bridge/system_command').set({'command': 'restart', 'timestamp': time.time()})
     st.toast("🔄 Yeniden Başlatma Komutu Gönderildi!", icon="🔄")
 
 def check_firebase_status():
@@ -211,10 +188,8 @@ def check_firebase_status():
         flow = st.session_state['telegram_flow']
         
         if flow['step'] == 'processing':
-            ref_req = db.reference('bridge/request')
-            status_data = ref_req.get()
+            status_data = db.reference('bridge/request').get()
             if not status_data: return
-            
             status = status_data.get('status')
             
             if status == 'waiting_user_selection':
@@ -223,7 +198,6 @@ def check_firebase_status():
                     st.session_state['telegram_flow']['options'] = res_data['options']
                     st.session_state['telegram_flow']['step'] = 'show_buttons'
                     st.rerun()
-            
             elif status == 'completed':
                 res_data = db.reference('bridge/response').get()
                 if res_data and 'image_base64' in res_data:
@@ -235,19 +209,17 @@ def check_firebase_status():
                         st.session_state['telegram_flow']['step'] = 'idle'
                         st.rerun()
                     except: pass
-            
             elif status == 'miniapp_waiting_upload':
                 st.session_state['telegram_flow']['step'] = 'upload_wait'
                 st.rerun()
-
             elif status == 'timeout':
-                st.error("Zaman aşımı. Bot yanıt vermedi.")
+                st.error("Zaman aşımı.")
                 st.session_state['telegram_flow']['step'] = 'idle'
                 st.rerun()
     except Exception: pass
 
 # ==========================================
-# 🤖 GEMINI ANALİZ (DÜZELTİLMİŞ RETRY VERSİYONU)
+# 🤖 GEMINI ANALİZ
 # ==========================================
 def get_current_key():
     pool = st.session_state['dynamic_key_pool']
@@ -255,10 +227,7 @@ def get_current_key():
     return pool[st.session_state['key_index'] % len(pool)]
 
 def analyze_images_stream(all_images, model_name):
-    # En fazla 3 kere yeniden denesin
     max_retries = 3
-    
-    # Mevcut Key
     key = get_current_key()
     if not key:
         yield "HATA: API Key bulunamadı!"
@@ -270,95 +239,83 @@ def analyze_images_stream(all_images, model_name):
     Sen Kıdemli Borsa Stratejistisin.
     
     GÖREVİN:
-    Ekteki görsellerdeki verileri (Derinlik, AKD, Takas, Mini-App Listeleri, Grafikler) oku ve YARIDA KESMEDEN detaylıca raporla.
+    Ekteki görsellerdeki verileri oku ve YARIDA KESMEDEN detaylıca raporla.
     Görselde veri yoksa, o başlığın altına "Veri bulunamadı" yaz.
     
     🎨 RENK KODLARI:
-    * :green[...] -> Yükseliş, Güçlü Alım, Destek Üstü, Pozitif.
-    * :red[...] -> Düşüş, Satış Baskısı, Direnç Altı, Negatif.
-    * :blue[...] -> Nötr Veri, Bilgi, Fiyat.
+    * :green[...] -> Yükseliş, Güçlü Alım, Pozitif.
+    * :red[...] -> Düşüş, Satış Baskısı, Negatif.
+    * :blue[...] -> Nötr Veri, Bilgi.
 
     📄 RAPOR FORMATI:
+    Her başlık "## [Sayı]. [Başlık]" formatında olmalı.
 
     ## 1. 🔍 GÖRSEL VERİ DÖKÜMÜ (Mini-App / Liste Varsa)
-    (Görseldeki tüm hisse, fiyat ve oranları buraya dök. Satır satır işle.)
+    (Satır satır veri dökümü.)
 
     ## 2. 📊 DERİNLİK ANALİZİ (Varsa)
     * **Alıcı/Satıcı Dengesi:** (:green[Alıcılar] mı :red[Satıcılar] mı güçlü?)
-    * **Emir Yığılmaları:** (Hangi kademede ne kadar lot var?)
-    * **KADEME YORUMU:** :blue[Buraya kademe yorumunu yap.]
-
-    ## 3. 🏢 KURUM VE PARA GİRİŞİ (AKD) (Varsa)
-    * **Toplayanlar:** (Kim alıyor? Maliyetleri ne?)
-    * **Satanlar:** (Kim satıyor? Para çıkışı var mı?)
-
-    ## 4. 🧠 GENEL SENTEZ VE SKOR
-    * **Piyasa Yönü:** (Yukarı/Aşağı/Yatay)
+    * **Emir Yığılmaları:** * **KADEME YORUMU:** ## 3. 🏢 KURUM VE PARA GİRİŞİ (AKD) (Varsa)
+    * **Toplayanlar:** * **Satanlar:** ## 4. 🧠 GENEL SENTEZ VE SKOR
     * **Genel Puan:** 10 üzerinden X
-    * **Yorum:** :blue[Piyasa yapıcı ne planlıyor?]
-
-    ## 5. 🎯 İŞLEM PLANI
+    * **Yorum:** ## 5. 🎯 İŞLEM PLANI
     * :green[**GÜVENLİ GİRİŞ:** ...] 
     * :red[**STOP LOSS:** ...]
     * :green[**HEDEF 1:** ...]
     * :green[**HEDEF 2:** ...]
 
     ## 6. 🔮 KAPANIŞ BEKLENTİSİ
-    (Günün geri kalanı için tahmin.)
+    (Tahmin.)
     
-    ## 7.Gizli Balina / Iceberg Avcısı
-    *Bu derinlik ve gerçekleşen işlemler (Time & Sales) görüntüsüne bak. Kademedeki görünür lot sayısı az olmasına rağmen, o fiyattan sürekli işlem geçmesine rağmen fiyat aşağı/yukarı gitmiyor mu? 'Iceberg Emir' (Gizli Emir) veya Duvar Örme durumu var mı? Tahtacı fiyatı belli bir seviyede tutmaya mı çalışıyor? Bu seviye bir biriktirme (akümülasyon) bölgesi mi?
+    ## 7. Gizli Balina / Iceberg Avcısı
+    *Iceberg Emir veya Duvar Örme durumu var mı?
     
     ## 8. Boğa/Ayı Tuzağı (Fakeout) Dedektörü
-    *Fiyat önemli bir direnci/desteği kırmış görünüyor. Ancak AKD (Aracı Kurum Dağılımı) ve Hacim bunu destekliyor mu? Kırılım anında Bofa, Yatırım Finansman gibi büyük oyuncular alıcı tarafta mı, yoksa küçük yatırımcıya mal mı devrediyorlar? Bu hareketin bir Fakeout (Sahte Kırılım) olma ihtimalini 10 üzerinden puanla.
+    *Fakeout (Sahte Kırılım) ihtimali?
     
-    ## 9.⚖️ Agresif vs. Pasif Emir Analizi
-    *Derinlikteki emirlerin niteliğini analiz et. Alıcılar 'Pasif'e mi (Kademeye) yazılıyor, yoksa 'Aktif'ten (Piyasa emriyle) mi alıyor? Satış kademeleri eriyor mu, yoksa sürekli yeni satış mı ekleniyor (Reloading)? Tahtadaki agresiflik (Market Buy/Sell) hangi yönde?
+    ## 9. ⚖️ Agresif vs. Pasif Emir Analizi
+    *Aktif mi Pasif mi?
     
-    ## 10.🏦 Maliyet ve Takas Baskısı
-    *Bugün en çok net alım yapan ilk 3 kurumun ortalama maliyetine bak. Şu anki fiyat, bu kurumların maliyetinin ne kadar üzerinde veya altında? Eğer fiyat maliyetlerinin çok altındaysa Zararına Satış baskısı oluşabilir mi? Yoksa maliyetlerine çekmek için fiyatı yukarı mı sürecekler?
+    ## 10. 🏦 Maliyet ve Takas Baskısı
+    *Maliyetlerin altında mı üstünde mi?
     
-    ## 11.🌊 RVOL ve Hacim Anormalliği
-    *Bu saatteki işlem hacmini, hissenin standart hacmiyle kıyasla (Göz kararı). Hacimde anormal bir patlama var mı? Eğer hacim yüksekse ama fiyat yerinde sayıyorsa (Doji/Spinning Top), bu bir 'Trend Dönüşü' sinyali olabilir mi? Hacim fiyatı destekliyor mu?
+    ## 11. 🌊 RVOL ve Hacim Anormalliği
+    *Hacim patlaması var mı?
     
     ## 12. 🧱 Kademe Boşlukları ve Spread Analizi
-    *Alış ve satış kademeleri arasındaki makas (spread) açık mı? Kademeler dolu mu yoksa boş mu (Sığ tahta)? Eğer kademeler boşsa, yüklü bir emirle fiyatın sert bir şekilde (Slippage) kayma ihtimali nedir? Bu tahtada 'Scalp' yapmak riskli mi?
+    *Slippage riski var mı?
     
     ## 13. 🔄 VWAP Dönüş (Mean Reversion)
-    *Fiyatın gün içi ağırlıklı ortalamadan (VWAP) ne kadar uzaklaştığını tahmin et. Lastik çok mu gerildi? Fiyatın VWAP'a doğru bir düzeltme (Pullback) yapma olasılığı var mı? Aşırı alım veya aşırı satım bölgesinde miyiz?
+    *Lastik çok mu gerildi? Pullback ihtimali?
     
     ## 14. 🎭 Piyasa Yapıcı Psikolojisi
-    *Tahtanın genel görünümüne bakarak 'Piyasa Yapıcı'nın (Market Maker) niyetini yorumla. Satış tarafına korkutma amaçlı yüklü Fake lotlar yazılmış olabilir mi? Alıcı tarafı bilerek mi zayıf bırakılmış (Mal toplamak için)? Yoksa gerçekten alıcı mı yok?
+    *Market Maker niyeti ne?
     
     ## 15. 🛑 Şeytanın Avukatı (Risk Analizi)
-    *Bana bu hisseyi almak için sebeplerimi sayma. NEDEN ALMAMALIYIM? Riskler neler? Görselde seni rahatsız eden, 'Gel Gel' operasyonu olabileceğine dair en ufak bir ipucu var mı? Eğer işler ters giderse, en mantıklı Stop Loss (Zarar Kes) seviyesi, hangi kademenin altıdır?
+    *NEDEN ALMAMALIYIM? Riskler neler?
     
     ## 16. Likidite Avı (Liquidity Sweep)
-    *Fiyat, belirgin bir destek veya direnç seviyesinin altına/üstüne 'iğne atıp' hemen geri döndü mü? Bu hareket, sadece oradaki stop emirlerini patlatıp likidite toplamak için mi yapıldı? Eğer öyleyse, bu 'Fake Kırılım' sonrası ters yöne sert bir hareket (Ralli/Çöküş) beklemeli miyim?
+    *Stop patlatma hareketi mi?
     
-    ## 17. 📊 "Point of Control (POC) ve Hacim Profili
-    *Görseldeki işlemlere bakarak, en çok hacmin döndüğü fiyat seviyesini (POC - Point of Control) tahmin et. Şu anki fiyat bu seviyenin üzerinde mi altında mı? Fiyat bu yoğun bölgeden hızla uzaklaşıyor mu (Kabul), yoksa sürekli oraya mı çekiliyor (Denge)? Fiyat POC'den uzaklaştıysa 'Dengesizlik' (Imbalance) trade'i fırsatı var mı?
+    ## 17. 📊 Point of Control (POC) ve Hacim Profili
+    *POC seviyesi nerede?
     
-    ## 18. 🏗️ "Adım Adım Mal Toplama (Step-Ladder)
-    *Derinlik ve gerçekleşen işlemlere bak. Fiyat düşmüyor ama her kademeye sistematik olarak küçük küçük (örn: 50, 100 lot) alışlar giriliyor mu? Bu, dikkat çekmeden mal toplayan bir 'Algoritmik Robot' (TWAP/VWAP botu) izi olabilir mi? Tahtada sinsi bir 'Emme' hareketi var mı?"
+    ## 18. 🏗️ Adım Adım Mal Toplama (Step-Ladder)
+    *Algoritmik Robot izi var mı?
     
-    ## 19. 🚦 "Dominant Taraf ve Delta Analizi
-    *Şu an tahtada gerçekleşen işlemlere bak (Time & Sales). İşlemler daha çok 'Satış Kademesinden' (Aktif Alış) mi geçiyor, yoksa 'Alış Kademesinden' (Aktif Satış) mi? Yani piyasa emri gönderenler ALICILAR mi SATICILAR mi? Delta (Net Alıcı - Net Satıcı) pozitif mi negatif mi? Kim daha agresif?
+    ## 19. 🚦 Dominant Taraf ve Delta Analizi
+    *Delta pozitif mi negatif mi?
 
     ## 20. 🗣️ SOHBET VE ANALİZ ÖZETİ (FİNAL)
-    *Buraya kadar yaptığın tüm teknik ve takas analizlerini harmanla (1-19. maddeler). Sanki karşında bir arkadaşın varmış gibi samimi bir dille durumu özetle.
-    *Bu hisse için nihai karar nedir? "Bu mal alınır" mı dersin yoksa "Uzak dur" mu?
-    *Kullandığın sıfatlarda duygu durumunu mutlaka renklendir:
-    * :green[GÜÇLÜ], :green[POZİTİF], :green[ALIM FIRSATI], :green[RALLİ], :green[GÜVENLİ], :green[FIRSAT] gibi olumlu kelimeleri YEŞİL yap.
-    * :red[ZAYIF], :red[NEGATİF], :red[SATIŞ BASKISI], :red[TUZAK], :red[TEHLİKELİ], :red[UÇURUM] gibi olumsuz kelimeleri KIRMIZI yap.
-    *Analizin en sonunda, tüm bu verileri tek bir cümlelik slogana dök.
+    *Özet karar: :green[ALIM FIRSATI] mı :red[UZAK DUR] mu?
+    *Slogan cümle.
 
     [KURAL]
-    *Analiz yaparken, başlıkların yanında, başlığın içeriği genel anlamda Olumlu - Nötr - Olumsuz olduklarını belirt. (Örn: KAPANIŞ BEKLENTİSİ [OLUMLU]) ve tabiki de OLUMLU: YEŞİL, OLUMSUZ: KIRMIZI, NÖTR: MAVİ renk olacak. (Sadece başlığın yanındaki OLUMLU, OLUMSUZ, NÖTR YAZISI)
-    *Bu renklendirmeler, başlığın altındaki içeriği etkilemeyecek. Başlığın altındaki analizlerde yine OLUMLU - OLUMSUZ - NÖTR cümleler ve kelimeler, yine OLUMLU: YEŞİL, OLUMSUZ: KIRMIZI, NÖTR: MAVİ olarak renklendirilecek.
+    *Analiz yaparken, başlıkların hemen yanına, genel duygu durumunu belirten metni ekle.
+    *Örnek: "## 6. 🔮 KAPANIŞ BEKLENTİSİ [OLUMLU]" veya "## 15. 🛑 Şeytanın Avukatı (Risk Analizi) [OLUMSUZ]" veya "[NÖTR]"
+    *Bu etiketleri kullanarak filtreleme yapacağız, o yüzden başlık satırında bu [ETİKET]'i eksik etme.
     """ 
 
-    # --- RETRY MEKANİZMASI ---
     for attempt in range(max_retries):
         try:
             client = genai.Client(api_key=key)
@@ -367,33 +324,65 @@ def analyze_images_stream(all_images, model_name):
                 temperature=0.2, 
                 max_output_tokens=99999 
             )
-            
             response_stream = client.models.generate_content_stream(
-                model=model_name, 
-                contents=gemini_contents, 
-                config=config
+                model=model_name, contents=gemini_contents, config=config
             )
-            
             for chunk in response_stream:
-                if chunk.text:
-                    yield chunk.text
-            
-            # Başarılı olursa döngüden çık
+                if chunk.text: yield chunk.text
             break
-
         except Exception as e:
             error_msg = str(e)
-            # Eğer hata 503 veya 429 (Too Many Requests) ise
             if "503" in error_msg or "429" in error_msg or "overloaded" in error_msg.lower():
                 if attempt < max_retries - 1:
                     yield f"⚠️ Sunucu yoğun ({model_name}), yeniden deneniyor... ({attempt+1}/{max_retries})\n\n"
-                    time.sleep(2) # 2 saniye bekle ve tekrar dene
+                    time.sleep(2)
                     continue
                 else:
-                    yield f"❌ HATA: Google Sunucuları çok yoğun, lütfen 1-2 dakika sonra tekrar deneyin veya modeli değiştirin. Hata: {error_msg}"
+                    yield f"❌ HATA: Google Sunucuları çok yoğun. Hata: {error_msg}"
             else:
                 yield f"HATA: {error_msg}"
                 break
+
+# ==========================================
+# 🧩 METİN AYRIŞTIRICI VE FİLTRELEME
+# ==========================================
+def parse_markdown_sections(text):
+    """
+    Markdown metnini '## ' başlıklarına göre böler ve her bölümün
+    duygu durumunu (renk) analiz eder.
+    """
+    if not text: return []
+    
+    # "## " ile başlayan kısımları böl
+    # Regex split kullanarak başlığı da yakalayabiliriz ama manuel split daha güvenli
+    raw_sections = text.split("## ")
+    parsed_sections = []
+    
+    for i, section in enumerate(raw_sections):
+        if not section.strip(): continue
+        
+        # Başlık satırını bul
+        lines = section.split('\n')
+        header_line = lines[0].strip()
+        body = "## " + section # Markdown formatını koru
+        
+        # Renk/Duygu Analizi
+        label_color = "blue" # Varsayılan Nötr
+        if any(x in header_line.upper() for x in ["OLUMLU", "POZİTİF", "YEŞİL", "GÜÇLÜ"]):
+            label_color = "green"
+        elif any(x in header_line.upper() for x in ["OLUMSUZ", "NEGATİF", "KIRMIZI", "ZAYIF", "RİSK"]):
+            label_color = "red"
+        
+        # Başlıktaki [OLUMLU] vb. tagleri temizleyip temiz başlık yapalım (isteğe bağlı, şimdilik kalsın)
+        
+        parsed_sections.append({
+            "id": i,
+            "header": header_line,
+            "body": body,
+            "color": label_color
+        })
+        
+    return parsed_sections
 
 # ==========================================
 # 🖥️ ARAYÜZ (MAIN)
@@ -406,50 +395,35 @@ def main():
     # --- SIDEBAR ---
     with st.sidebar:
         st.header("⚙️ Ayarlar")
-        
-        # --- İSTEDİĞİN BUTON BURADA ---
         if st.button("🔄 TELEGRAM İLETİŞİM BAĞLANTISINI YENİDEN BAŞLAT"):
             send_restart_command()
-        
         if st.button("⚠️ SİSTEMİ SIFIRLA (RESET)", type="primary"):
             st.session_state.clear()
             st.rerun()
-            
         st.divider()
         
-        # --- BOT SEÇİMİ ---
         st.subheader("🤖 Kanal Seçimi")
         current_name = st.session_state.get('selected_bot_key', 'xFinans')
         if current_name not in BOT_CONFIGS: current_name = 'xFinans'
         idx = list(BOT_CONFIGS.keys()).index(current_name)
-            
-        selected_bot_name = st.selectbox(
-            "Veri Kaynağı:", 
-            list(BOT_CONFIGS.keys()),
-            index=idx
-        )
-        
+        selected_bot_name = st.selectbox("Veri Kaynağı:", list(BOT_CONFIGS.keys()), index=idx)
         if selected_bot_name != st.session_state.get('selected_bot_key'):
             st.session_state['selected_bot_key'] = selected_bot_name
             st.rerun()
-            
         st.caption(f"Aktif ID: {BOT_CONFIGS[selected_bot_name]['username']}")
         st.divider()
 
         st.subheader("🔑 API Anahtarları")
         current_keys = "\n".join(st.session_state['dynamic_key_pool'])
         keys_input = st.text_area("Gemini Keyler", value=current_keys, height=100)
-        
         if st.button("💾 Kaydet"):
-            keys_list = keys_input.split('\n')
-            save_keys_to_disk(keys_list)
+            save_keys_to_disk(keys_input.split('\n'))
             st.success("Kaydedildi!")
             st.rerun()
-
+        
         if st.button("🔍 KEY TESTİ (2.5)"):
             pool = st.session_state['dynamic_key_pool']
-            if not pool:
-                st.error("Key yok!")
+            if not pool: st.error("Key yok!")
             else:
                 st.info(f"Test Modelleri:\n{MODEL_FLASH}\n{MODEL_LITE}")
                 res_box = st.container(border=True)
@@ -466,12 +440,10 @@ def main():
                             l_status = "✅"
                         except: l_status = "❌"
                         res_box.write(f"**{mk}** | F: {f_status} | L: {l_status}")
-                    except Exception as e:
-                        res_box.error(f"HATA: {e}")
+                    except Exception as e: res_box.error(f"HATA: {e}")
 
-    # --- MAIN ---
+    # --- MAIN CONTENT ---
     st.title(f"⚡ Scalper AI: {selected_bot_name}")
-    
     col1, col2 = st.columns([1, 1])
     
     with col1:
@@ -481,22 +453,17 @@ def main():
         buttons_list = BOT_CONFIGS[selected_bot_name]["buttons"]
         num_columns = 4
         columns = st.columns(num_columns)
-        
         for i, (btn_label, btn_cmd) in enumerate(buttons_list):
             col_idx = i % num_columns
             if columns[col_idx].button(btn_label, use_container_width=True):
                 start_telegram_request(symbol, btn_cmd)
 
         step = st.session_state['telegram_flow']['step']
-        # GÖRSEL DÜZELTME: ID'yi ekranda göstermesi sorun değil
-        target_username = BOT_CONFIGS[selected_bot_name]["username"]
-
         if step == 'processing':
             st.info(f"⏳ Veri Çekiliyor...")
             st.spinner("İşleniyor...")
             time.sleep(1)
             st.rerun()
-            
         elif step == 'show_buttons':
             st.success("👇 Seçenekler:")
             opts = st.session_state['telegram_flow']['options']
@@ -504,7 +471,6 @@ def main():
             for i, opt in enumerate(opts):
                 if cols[i%2].button(f"👉 {opt}", key=f"btn_{i}"):
                     send_user_selection(opt)
-
         elif step == 'upload_wait':
             st.warning("⚠️ MİNİ-APP LİSTESİ AÇILDI!")
             st.info("Lütfen telefondan listeyi açıp SS alın ve SAĞ TARAFA yükleyin.")
@@ -513,46 +479,29 @@ def main():
                 st.session_state['telegram_flow']['step'] = 'idle'
                 st.rerun()
 
-        # ==========================================
-        # 🆕 X TARAYICI (GÖRSELE BİREBİR UYGUN)
-        # ==========================================
+        # 𝕏 TARAYICI
         st.divider()
         st.subheader("𝕏 Tarayıcı")
-        
-        # 1. KOD GİRİŞİ (Görseldeki gibi)
         x_symbol = st.text_input("Kod:", value=symbol if symbol else "THYAO", key="x_input_real").upper()
-        
-        # 2. TİP SEÇİMİ (Radio Button - Görseldeki gibi)
         search_type = st.radio("Tip:", ["🔥 Geçmiş", "⏱️ Canlı"], key="x_search_type")
-        
-        # 3. TARİH SEÇİMİ (Sadece Geçmiş seçiliyken anlamlı ama görselde var)
         x_date = st.date_input("Tarih", datetime.date.today(), key="x_date_picker")
         
-        # 4. LİNK OLUŞTURMA MANTIĞI
         final_url = ""
         btn_label = ""
-        
         if search_type == "🔥 Geçmiş":
-            # Geçmiş araması: O tarihten bir sonraki güne kadar olan tweetler
             next_day = x_date + datetime.timedelta(days=1)
             query = f"#{x_symbol} lang:tr until:{next_day} since:{x_date} min_faves:5"
             final_url = f"https://x.com/search?q={quote(query)}&src=typed_query&f=top"
             btn_label = f"🔥 {x_date} Popüler"
         else:
-            # Canlı arama
             query = f"#{x_symbol} lang:tr"
             final_url = f"https://x.com/search?q={quote(query)}&src=typed_query&f=live"
             btn_label = f"⏱️ {x_symbol} Son Dakika"
-            
-        # 5. BUTON (Görseldeki link yapısına uygun)
         st.link_button(btn_label, url=final_url, use_container_width=True)
-        # ==========================================
 
     with col2:
         st.subheader("🧠 Detaylı Analiz")
-        
-        uploaded_files = st.file_uploader("Görsel Yükle (Mini-App / Ekran Görüntüsü)", accept_multiple_files=True)
-        
+        uploaded_files = st.file_uploader("Görsel Yükle", accept_multiple_files=True)
         if uploaded_files and st.session_state['telegram_flow']['step'] == 'upload_wait':
             db.reference('bridge/request').update({'status': 'manual_completed'})
             st.session_state['telegram_flow']['step'] = 'idle'
@@ -567,24 +516,22 @@ def main():
             cols = st.columns(3)
             for i, img in enumerate(all_imgs):
                 cols[i%3].image(img, use_container_width=True)
-            
             if st.button("TEMİZLE", type="secondary"):
                 st.session_state['telegram_images'] = []
+                st.session_state['analysis_result'] = None
                 st.rerun()
 
             st.divider()
             model_choice = st.radio("Model:", [MODEL_FLASH, MODEL_LITE], horizontal=True)
 
-            # --- PROGRESS BAR İLE ANALİZ ---
+            # --- ANALİZ BUTONU ---
             if st.button("ANALİZİ BAŞLAT 🚀", type="primary", use_container_width=True):
-                # İlerleme Çubuğu Başlangıcı
                 progress_bar = st.progress(0)
                 status_text = st.empty()
-                ESTIMATED_TOTAL_CHARS = 9000 
-                
                 response_container = st.empty()
                 full_text = ""
                 
+                # Canlı Yayın (Streaming)
                 for chunk_text in analyze_images_stream(all_imgs, model_choice):
                     if chunk_text.startswith("HATA:"):
                         st.error(chunk_text)
@@ -592,16 +539,69 @@ def main():
                     else:
                         full_text += chunk_text
                         response_container.markdown(full_text)
-                        
-                        # İlerleme Hesabı
-                        current_len = len(full_text)
-                        progress = min(current_len / ESTIMATED_TOTAL_CHARS, 0.95)
+                        progress = min(len(full_text) / 9000, 0.95)
                         progress_bar.progress(progress)
                         status_text.caption(f"Analiz yazılıyor... %{int(progress * 100)}")
                 
                 progress_bar.progress(1.0)
                 status_text.caption("Analiz Tamamlandı! %100")
-                st.success("Analiz Tamamlandı!")
+                
+                # SONUCU KAYDET VE YENİLE (Filtrelerin çalışması için)
+                st.session_state['analysis_result'] = full_text
+                st.rerun()
+
+            # --- FİLTRELİ SONUÇ GÖSTERİMİ ---
+            if st.session_state['analysis_result']:
+                st.divider()
+                st.subheader("🔍 Rapor Filtreleme")
+                
+                # Metni parçalara ayır
+                sections = parse_markdown_sections(st.session_state['analysis_result'])
+                
+                # Filtre Seçenekleri (Expander içinde)
+                with st.expander("📂 Başlıkları Filtrele (Renkli)", expanded=True):
+                    # Tümünü Seç/Kaldır
+                    col_act1, col_act2 = st.columns(2)
+                    if col_act1.button("Tümünü Göster"):
+                        for s in sections: st.session_state['filter_state'][s['id']] = True
+                        st.rerun()
+                    if col_act2.button("Tümünü Gizle"):
+                        for s in sections: st.session_state['filter_state'][s['id']] = False
+                        st.rerun()
+                    
+                    st.divider()
+                    
+                    # Checkboxları oluştur (Renkli Başlıklar)
+                    # 3 Sütun halinde gösterelim
+                    f_cols = st.columns(2)
+                    for i, s in enumerate(sections):
+                        # Varsayılan olarak seçili gelsin (ilk oluşumda)
+                        if s['id'] not in st.session_state['filter_state']:
+                            st.session_state['filter_state'][s['id']] = True
+                            
+                        # Renkli Label Oluşturma
+                        display_text = f":{s['color']}[{s['header']}]"
+                        
+                        f_cols[i % 2].checkbox(
+                            display_text, 
+                            key=f"chk_{s['id']}", 
+                            value=st.session_state['filter_state'][s['id']],
+                            on_change=lambda id=s['id']: st.session_state['filter_state'].update({id: not st.session_state['filter_state'][id]})
+                        )
+
+                # --- SEÇİLİ BÖLÜMLERİ YAZDIR ---
+                st.markdown("---")
+                for s in sections:
+                    # Session state'deki checkbox durumuna göre göster
+                    # Checkbox key'i "chk_X" ise, session_state'den o keyi oku, yoksa manuel state'e bak
+                    is_checked = st.session_state.get(f"chk_{s['id']}", True)
+                    
+                    if is_checked:
+                        st.markdown(s['body'])
+                        st.markdown("") # Boşluk
+                
+                st.success("Analiz Gösterildi.")
+
         else:
             if step == 'upload_wait':
                 st.markdown("### ⬅️ LÜTFEN GÖRSEL YÜKLEYİN")
