@@ -241,16 +241,20 @@ def analyze_images_stream(all_images, model_name):
     Ekteki görsellerdeki verileri oku ve YARIDA KESMEDEN detaylıca raporla.
     Görselde veri yoksa, o başlığın altına "Veri bulunamadı" yaz.
     
-    🎨 RENK KODLARI:
+    📄 RAPOR FORMATI VE ETİKETLEME KURALI (ÇOK ÖNEMLİ):
+    1. Her başlık mutlaka "## [Sayı]. [Başlık]" formatında olmalı.
+    2. Her başlığın HEMEN YANINA, o bölümdeki analizin genel sonucuna göre [OLUMLU], [OLUMSUZ] veya [NÖTR] etiketini EKLEMEK ZORUNDASIN.
+    3. Bu etiketi belirlerken sadece sayısal verilere değil, gidişata ve riske bak.
+    
+    Örnek Doğru Başlıklar:
+    "## 1. 📊 DERİNLİK ANALİZİ [OLUMLU]"
+    "## 7. 🛑 Şeytanın Avukatı (Risk Analizi) [OLUMSUZ]"
+    "## 3. 🏢 KURUM VE PARA GİRİŞİ (AKD) [NÖTR]"
+
+    🎨 RENK KODLARI (Metin İçi):
     * :green[...] -> Yükseliş, Güçlü Alım, Pozitif.
     * :red[...] -> Düşüş, Satış Baskısı, Negatif.
     * :blue[...] -> Nötr Veri, Bilgi.
-
-    📄 RAPOR FORMATI:
-    Her başlık "## [Sayı]. [Başlık]" formatında olmalı.
-    
-    [ÖNEMLİ] Her başlığın HEMEN YANINA mutlaka [OLUMLU], [OLUMSUZ] veya [NÖTR] etiketlerinden birini yaz.
-    Örnek: "## 1. 📊 DERİNLİK ANALİZİ [OLUMLU]"
 
     ## 1. 🔍 GÖRSEL VERİ DÖKÜMÜ (Mini-App / Liste Varsa)
     (Satır satır veri dökümü.)
@@ -311,11 +315,6 @@ def analyze_images_stream(all_images, model_name):
     ## 20. 🗣️ SOHBET VE ANALİZ ÖZETİ (FİNAL)
     *Özet karar: :green[ALIM FIRSATI] mı :red[UZAK DUR] mu?
     *Slogan cümle.
-
-    [KURAL]
-    *Analiz yaparken, başlıkların hemen yanına, genel duygu durumunu belirten metni ekle.
-    *Örnek: "## 6. 🔮 KAPANIŞ BEKLENTİSİ [OLUMLU]" veya "## 15. 🛑 Şeytanın Avukatı (Risk Analizi) [OLUMSUZ]" veya "[NÖTR]"
-    *Bu etiketleri kullanarak filtreleme yapacağız, o yüzden başlık satırında bu [ETİKET]'i eksik etme.
     """ 
 
     for attempt in range(max_retries):
@@ -346,12 +345,14 @@ def analyze_images_stream(all_images, model_name):
                 break
 
 # ==========================================
-# 🧩 METİN AYRIŞTIRICI VE FİLTRELEME
+# 🧩 METİN AYRIŞTIRICI VE FİLTRELEME (HİBRİT)
 # ==========================================
 def parse_markdown_sections(text):
     """
-    Markdown metnini '## ' başlıklarına göre böler.
-    Gelişmiş kelime avcısı ile OLUMLU/OLUMSUZ/NÖTR durumunu net belirler.
+    Markdown metnini böler ve rengi belirler.
+    STRATEJİ:
+    1. Önce Yapay Zeka'nın koyduğu [ETİKET]'e bakar (En Kesin Yöntem).
+    2. Eğer etiket yoksa, geniş kelime havuzundan (POS_KEYWORDS vb.) tarar.
     """
     if not text: return []
     
@@ -360,7 +361,7 @@ def parse_markdown_sections(text):
     
     counter = 0 
     
-    # --- GÜÇLÜ KELİME HAVUZU (Tüm varyasyonlar) ---
+    # --- YEDEK KELİME HAVUZU (Fallback) ---
     POS_KEYWORDS = ["OLUMLU", "POZİTİF", "POZITIF", "YEŞİL", "YESIL", "GÜÇLÜ", "GUCLU", "ALIM", "FIRSAT", "RALLİ", "RALLI", "GÜVENLİ", "GUVENLI", "YÜKSELİŞ", "YUKSELIS"]
     NEG_KEYWORDS = ["OLUMSUZ", "NEGATİF", "NEGATIF", "KIRMIZI", "ZAYIF", "RİSK", "RISK", "TUZAK", "UZAK", "SATIŞ", "SATIS", "DÜŞÜŞ", "DUSUS", "TEHLİKE", "TEHLIKE", "UÇURUM", "UCURUM"]
     NEU_KEYWORDS = ["NÖTR", "NOTR", "YATAY", "DENGELİ", "DENGELI", "KARARSIZ", "BELİRSİZ", "BELIRSIZ"]
@@ -371,40 +372,40 @@ def parse_markdown_sections(text):
         lines = section.split('\n')
         header_line = lines[0].strip()
         
-        # Filtreleme: Sadece rakamla başlayanları al (Giriş metnini atla)
+        # Filtreleme: Sadece rakamla başlayanları al
         if not re.match(r'^\d+\.', header_line):
             continue
             
         body = "## " + section
         
-        # --- GELİŞMİŞ RENK ANALİZİ ---
+        # --- RENK VE DUYGU ANALİZİ ---
         label_color = "blue" # Varsayılan: Nötr
         
-        # Türkçe karakter temizliği yaparak uppercase yapalım
-        # (Basit replace yeterli, detaylı kütüphaneye gerek yok)
+        # Türkçe karakter temizliği yaparak uppercase
         clean_header = header_line.replace('İ', 'I').replace('ı', 'I').upper()
         
-        # Öncelik Sırası: Eğer hem risk hem olumlu varsa, [Tag] önceliklidir.
-        # Bu yüzden önce "OLUMLU", "OLUMSUZ", "NÖTR" kelimelerini tarayalım.
-        
-        is_pos = any(k in clean_header for k in POS_KEYWORDS)
-        is_neg = any(k in clean_header for k in NEG_KEYWORDS)
-        is_neu = any(k in clean_header for k in NEU_KEYWORDS)
-        
-        if is_pos and not is_neg:
+        # 1. YÖNTEM: AI TAG KONTROLÜ (Öncelikli)
+        ai_pos = "[OLUMLU]" in clean_header or "[POZİTİF]" in clean_header
+        ai_neg = "[OLUMSUZ]" in clean_header or "[NEGATİF]" in clean_header
+        ai_neu = "[NÖTR]" in clean_header or "[NOTR]" in clean_header
+
+        if ai_pos:
             label_color = "green"
-        elif is_neg and not is_pos:
+        elif ai_neg:
             label_color = "red"
-        elif is_pos and is_neg:
-            # Çakışma varsa (Örn: "Düşüş Riski [OLUMLU]" - Düşük ihtimal ama olsun)
-            # Genelde tag parantez içindedir, onu baz alalım.
-            if "OLUMLU" in clean_header or "POZİTİF" in clean_header:
-                label_color = "green"
-            else:
-                label_color = "red"
-        elif is_neu:
+        elif ai_neu:
             label_color = "blue"
-        
+        else:
+            # 2. YÖNTEM: KELİME HAVUZU (AI Etiket Koymayı Unuttuysa)
+            kw_pos = any(k in clean_header for k in POS_KEYWORDS)
+            kw_neg = any(k in clean_header for k in NEG_KEYWORDS)
+            
+            if kw_pos and not kw_neg:
+                label_color = "green"
+            elif kw_neg and not kw_pos:
+                label_color = "red"
+            # Çakışma varsa veya hiçbiri yoksa Blue kalır.
+
         parsed_sections.append({
             "id": counter,
             "header": header_line,
