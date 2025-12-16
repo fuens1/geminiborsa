@@ -256,63 +256,61 @@ def analyze_images_stream(all_images, model_name):
     * :red[...] -> Düşüş, Satış Baskısı, Negatif.
     * :blue[...] -> Nötr Veri, Bilgi.
 
-    ## 1. 🔍 GÖRSEL VERİ DÖKÜMÜ (Mini-App / Liste Varsa)
-    (Satır satır veri dökümü.)
 
-    ## 2. 📊 DERİNLİK ANALİZİ (Varsa)
+    ## 1. 📊 DERİNLİK ANALİZİ (Varsa)
     * **Alıcı/Satıcı Dengesi:** (:green[Alıcılar] mı :red[Satıcılar] mı güçlü?)
-    * **Emir Yığılmaları:** * **KADEME YORUMU:** ## 3. 🏢 KURUM VE PARA GİRİŞİ (AKD) (Varsa)
-    * **Toplayanlar:** * **Satanlar:** ## 4. 🧠 GENEL SENTEZ VE SKOR
+    * **Emir Yığılmaları:** * **KADEME YORUMU:** ## 2. 🏢 KURUM VE PARA GİRİŞİ (AKD) (Varsa)
+    * **Toplayanlar:** * **Satanlar:** ## 3. 🧠 GENEL SENTEZ VE SKOR
     * **Genel Puan:** 10 üzerinden X
-    * **Yorum:** ## 5. 🎯 İŞLEM PLANI
+    * **Yorum:** ## 4. 🎯 İŞLEM PLANI
     * :green[**GÜVENLİ GİRİŞ:** ...] 
     * :red[**STOP LOSS:** ...]
     * :green[**HEDEF 1:** ...]
     * :green[**HEDEF 2:** ...]
 
-    ## 6. 🔮 KAPANIŞ BEKLENTİSİ
+    ## 5. 🔮 KAPANIŞ BEKLENTİSİ
     (Tahmin.)
     
-    ## 7. Gizli Balina / Iceberg Avcısı
+    ## 6. Gizli Balina / Iceberg Avcısı
     *Iceberg Emir veya Duvar Örme durumu var mı?
     
-    ## 8. Boğa/Ayı Tuzağı (Fakeout) Dedektörü
+    ## 7. Boğa/Ayı Tuzağı (Fakeout) Dedektörü
     *Fakeout (Sahte Kırılım) ihtimali?
     
-    ## 9. ⚖️ Agresif vs. Pasif Emir Analizi
+    ## 8. ⚖️ Agresif vs. Pasif Emir Analizi
     *Aktif mi Pasif mi?
     
-    ## 10. 🏦 Maliyet ve Takas Baskısı
+    ## 9. 🏦 Maliyet ve Takas Baskısı
     *Maliyetlerin altında mı üstünde mi?
     
-    ## 11. 🌊 RVOL ve Hacim Anormalliği
+    ## 10. 🌊 RVOL ve Hacim Anormalliği
     *Hacim patlaması var mı?
     
-    ## 12. 🧱 Kademe Boşlukları ve Spread Analizi
+    ## 11. 🧱 Kademe Boşlukları ve Spread Analizi
     *Slippage riski var mı?
     
-    ## 13. 🔄 VWAP Dönüş (Mean Reversion)
+    ## 12. 🔄 VWAP Dönüş (Mean Reversion)
     *Lastik çok mu gerildi? Pullback ihtimali?
     
-    ## 14. 🎭 Piyasa Yapıcı Psikolojisi
+    ## 13. 🎭 Piyasa Yapıcı Psikolojisi
     *Market Maker niyeti ne?
     
-    ## 15. 🛑 Şeytanın Avukatı (Risk Analizi)
+    ## 14. 🛑 Şeytanın Avukatı (Risk Analizi)
     *NEDEN ALMAMALIYIM? Riskler neler?
     
-    ## 16. Likidite Avı (Liquidity Sweep)
+    ## 15. Likidite Avı (Liquidity Sweep)
     *Stop patlatma hareketi mi?
     
-    ## 17. 📊 Point of Control (POC) ve Hacim Profili
+    ## 16. 📊 Point of Control (POC) ve Hacim Profili
     *POC seviyesi nerede?
     
-    ## 18. 🏗️ Adım Adım Mal Toplama (Step-Ladder)
+    ## 17. 🏗️ Adım Adım Mal Toplama (Step-Ladder)
     *Algoritmik Robot izi var mı?
     
-    ## 19. 🚦 Dominant Taraf ve Delta Analizi
+    ## 18. 🚦 Dominant Taraf ve Delta Analizi
     *Delta pozitif mi negatif mi?
 
-    ## 20. 🗣️ SOHBET VE ANALİZ ÖZETİ (FİNAL)
+    ## 19. 🗣️ SOHBET VE ANALİZ ÖZETİ (FİNAL)
     *Özet karar: :green[ALIM FIRSATI] mı :red[UZAK DUR] mu?
     *Slogan cümle.
     """ 
