@@ -217,6 +217,8 @@ def check_firebase_status():
                 st.rerun()
     except Exception: pass
 
+# [Lines 1-320 omitted for brevity] ...
+
 # ==========================================
 # 🤖 GEMINI ANALİZ
 # ==========================================
@@ -233,7 +235,9 @@ def analyze_images_stream(all_images, model_name):
         return
 
     gemini_contents = [ "Aşağıdaki borsa görsellerini (Grafik, Liste, Derinlik, Takas vb.) en ince detayına kadar analiz et." ] + all_images
-SYSTEM_INSTRUCTION = """
+
+    # Correct indentation for SYSTEM_INSTRUCTION
+    SYSTEM_INSTRUCTION = """
     Sen Kıdemli Borsa Stratejistisin.
     
     GÖREVİN:
@@ -335,6 +339,7 @@ SYSTEM_INSTRUCTION = """
     * **Slogan Cümle:** Durumu özetleyen tek cümlelik vurucu başlık.
     """
 
+    # Correct indentation for the loop: aligning it with SYSTEM_INSTRUCTION
     for attempt in range(max_retries):
         try:
             client = genai.Client(api_key=key)
