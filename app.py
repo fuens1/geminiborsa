@@ -236,7 +236,6 @@ def analyze_images_stream(all_images, model_name):
 
     gemini_contents = [ "Aşağıdaki borsa görsellerini (Grafik, Liste, Derinlik, Takas vb.) en ince detayına kadar analiz et." ] + all_images
 
-    # Correct indentation for SYSTEM_INSTRUCTION
     SYSTEM_INSTRUCTION = """
     Sen Kıdemli Borsa Stratejistisin.
     
@@ -334,10 +333,19 @@ def analyze_images_stream(all_images, model_name):
     ## 19. ↕ Destek - Direnç Analizi
     * En güçlü destek (Alım yeri) ve direnç (Satış yeri) noktaları.
 
-    ## 20. 🗣️ SOHBET VE ANALİZ ÖZETİ (FİNAL KARAR)
+    ## 20. 🛡️ BAŞA YIKILMAYACAK MAL ANALİZİ (Batmaz Gemi Formasyonu)
+    * **Formül:** `Dominant Maliyet >= İlk 5 Ort. Maliyet ~= Anlık Fiyat`
+    * **Sorgu 1 (Dominant Güç):** En iyi alıcı (BofA vb.) diğerlerinden daha pahalıya mı alıyor? (Bu, "Maliyetim artsa da alırım" mesajı verir, pozitiftir.)
+    * **Sorgu 2 (Yıkım Riski):** Fiyat, Dominant Maliyetin çok üzerinde mi? (Eğer %5+ üzerindeyse "Mal Yıkma" riski vardır.)
+    * **Karar:** - Fiyat, Patron Maliyetine yakınsa: :green[GÜVENLİ LİMAN (Yıkılmaz)]
+      - Patron çok kârdaysa: :red[TUZAK RİSKİ (Dikkat)]
+
+    ## 21. 🗣️ SOHBET VE ANALİZ ÖZETİ (FİNAL KARAR)
     * **Nihai Karar:** :green[ALIM FIRSATI] - :blue[İZLE] - :red[UZAK DUR]
     * **Slogan Cümle:** Durumu özetleyen tek cümlelik vurucu başlık.
-    """
+
+
+"""
 
     # Correct indentation for the loop: aligning it with SYSTEM_INSTRUCTION
     for attempt in range(max_retries):
