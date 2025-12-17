@@ -333,7 +333,7 @@ SYSTEM_INSTRUCTION = """
     ## 20. 🗣️ SOHBET VE ANALİZ ÖZETİ (FİNAL KARAR)
     * **Nihai Karar:** :green[ALIM FIRSATI] - :blue[İZLE] - :red[UZAK DUR]
     * **Slogan Cümle:** Durumu özetleyen tek cümlelik vurucu başlık.
-"""
+    """
 
     for attempt in range(max_retries):
         try:
