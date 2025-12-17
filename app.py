@@ -564,7 +564,18 @@ def main():
             time.sleep(1)
             st.rerun()
 
-        all_imgs = (uploaded_files or []) + st.session_state['telegram_images']
+        manual_imgs = []
+        if uploaded_files:
+            for uf in uploaded_files:
+                try:
+                    # Dosyayı PIL Image formatında aç
+                    img = Image.open(uf)
+                    manual_imgs.append(img)
+                except Exception as e:
+                    st.error(f"Görsel okuma hatası: {e}")
+
+        # Manuel yüklenenler (PIL) + Telegram'dan gelenler (PIL) birleştiriliyor
+        all_imgs = manual_imgs + st.session_state['telegram_images']
 
         if all_imgs:
             st.write(f"{len(all_imgs)} Görsel Analize Hazır")
