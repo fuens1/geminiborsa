@@ -344,6 +344,33 @@ def analyze_images_stream(all_images, model_name):
     * **Nihai Karar:** :green[ALIM FIRSATI] - :blue[İZLE] - :red[UZAK DUR]
     * **Slogan Cümle:** Durumu özetleyen tek cümlelik vurucu başlık.
 
+    ## 22. ⛔ "RED BAYRAK" TARAMASI (Deal Breaker - VETO SEBEPLERİ)
+    # Bu bölümdeki HERHANGİ bir madde "EVET" ise, analiz direkt "GİRME/SAT" olarak sonuçlanmalıdır.
+    * **1. Patron Satışı:** Takasta ilk 2 kurum (özellikle Citibank/Yatırım Fonları) agresif satıcı mı?
+    * **2. Makas Uçurumu:** Fiyat, AORT'un %3'ten fazla üzerinde mi? (Cevap EVET ise: :red[ASLA ALMA, DÜZELTME BEKLE])
+    * **3. Hacimsiz Yükseliş:** Fiyat artıyor ama hacim ortalamanın altında mı? (Fake Yükseliş)
+    * **4. Tepeden Dönüş:** Mum grafiğinde üst fitil (satış baskısı) gövdeden uzun mu?
+
+    ## 23. 📉 "BATSAM NE OLUR?" SİMÜLASYONU (Acı Gerçekler)
+    # Kullanıcının parasını korumak için en kötü senaryoyu hesapla.
+    * **Senaryo:** Buradan alıp stop olamazsan ve taban yerse kaybın yüzdesel olarak ne olur?
+    * **Soru:** Bu riski almaya değer mi? (Risk/Ödül oranı 1'e 3 değilse :red[İŞLEMİ İPTAL ET])
+
+    ## 24. 🧠 PSİKOLOJİK KONTROL (FOMO Testi)
+    * Şu anki alım isteği teknik bir kırılıma mı dayanıyor, yoksa "Kaçıyor" hissine mi?
+    * **Yapay Zeka Yorumu:** Grafikte "tavan serisi" veya "dikine çıkış" varsa kullanıcıyı uyar: "Bu malı almak, giden trenin önüne atlamaktır."
+
+    ## 25. 🧊 BUZ GİBİ GERÇEKLER (Hype Arındırma)
+    * Sosyal medyada bu hisse çok konuşuluyor mu? (Küçük yatırımcı doluştuysa :red[TEHLİKE])
+    * Tahta sahibi malı küçük yatırımcıya mı dağıtıyor? (AKD'de "Diğer" kısmı alıcı tarafındaysa :red[KAÇ])
+
+    ## 26. 🛡️ SERMAYE KORUMA KALKANI (Nihai Emir)
+    # Burası yumuşak konuşma yeri değil.
+    * Eğer analizde 3'ten fazla :red[...] etiket varsa:
+      -> **SONUÇ:** "PARANI CEBİNDE TUT. YARIN BAŞKA FIRSAT VAR."
+    * Eğer analizde :green[...] baskınsa ama AORT farkı yüksekse:
+      -> **SONUÇ:** "GÜZEL KAĞIT AMA YANLIŞ ZAMAN. GERİ ÇEKİLME EMRİ GİR."
+
 
 """
 
